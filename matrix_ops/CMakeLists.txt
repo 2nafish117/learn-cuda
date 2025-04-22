@@ -4,5 +4,7 @@ set(TARGET matrix_ops)
 add_executable(${TARGET} main.cu)
 
 set_property(TARGET ${TARGET} PROPERTY CUDA_ARCHITECTURES OFF)
+set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 20)
+
 target_compile_options(${TARGET} PRIVATE -G)
 
