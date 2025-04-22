@@ -2,6 +2,6 @@
 
 ## TODO
 
-1. matrix multiplication
-2. image bluring
+1. matrix multiplication writeup, cleanup
+2. image blurring
 3. raytracer/pathtracer

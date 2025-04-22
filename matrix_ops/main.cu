@@ -6,6 +6,9 @@
 #include <random>
 #include <cassert>
 
+#include <clog/log.h>
+#include <stb/stb_image.h>
+
 class ScopedTimer final {
 public:
 	ScopedTimer(std::string_view name) 
@@ -22,7 +25,7 @@ public:
 		using namespace std::chrono_literals;
 
 		m_stop = high_resolution_clock::now();
-		std::printf("%s elapsed %f\n", m_name.data(), Elapsed());
+		log_info("%s elapsed %f\n", m_name.data(), Elapsed());
 	}
 
 private:
@@ -79,7 +82,7 @@ void cudaErrorPrint(cudaError_t err) {
 	if(err != cudaSuccess) {
 		const char* errStr = cudaGetErrorString(err);
 		const char* errName = cudaGetErrorName(err);
-		std::fprintf(stderr, "[cuda error %d] %s %s\n", err, errName, errStr);
+		log_error("[cuda error %d] %s %s\n", err, errName, errStr);
 	}
 }
 
