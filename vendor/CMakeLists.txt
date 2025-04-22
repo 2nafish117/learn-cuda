@@ -17,8 +17,8 @@ set_target_properties(update_mappings PROPERTIES FOLDER "Vendor/GLTF3")
 # spdlog stuff
 # set(SPDLOG_WCHAR_SUPPORT ON)
 # set(SPDLOG_WCHAR_FILENAMES ON)
-add_subdirectory(spdlog-1.14.1)
-set_target_properties(spdlog PROPERTIES FOLDER "Vendor")
+# add_subdirectory(spdlog-1.14.1)
+# set_target_properties(spdlog PROPERTIES FOLDER "Vendor")
 
 # cgltf stuff
 add_subdirectory(cgltf)

@@ -1,4 +1,4 @@
-#include "common.ch"
+#include "common.cuh"
 
 // #include <spdlog/spdlog.h>
 

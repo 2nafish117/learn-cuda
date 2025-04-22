@@ -1,4 +1,4 @@
-#include <common.ch>
+#include <common/common.cuh>
 
 #include <iostream>
 
