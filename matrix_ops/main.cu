@@ -1,4 +1,4 @@
-#include <common/common.cuh>
+#include <common/common.h>
 
 #include <iostream>
 #include <chrono>

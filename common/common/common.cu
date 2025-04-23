@@ -1,6 +1,4 @@
-#include "common.cuh"
-
-// #include <spdlog/spdlog.h>
+#include "common.h"
 
 ScopedTimer::ScopedTimer(std::string_view name) 
 	: m_name(name)
@@ -17,7 +15,6 @@ ScopedTimer::~ScopedTimer() {
 
 	m_stop = high_resolution_clock::now();
 	std::printf("%s elapsed %f", m_name.data(), Elapsed());
-	// spdlog::info("{} elapsed {}", m_name, Elapsed());
 }
 
 void cudaErrorPrint(cudaError_t err) {
@@ -25,6 +22,5 @@ void cudaErrorPrint(cudaError_t err) {
 		const char* errStr = cudaGetErrorString(err);
 		const char* errName = cudaGetErrorName(err);
 		std::printf("[cuda error %d] %s %s", (uint32_t) err, errName, errStr);
-		// spdlog::error("[cuda error {}] {} {}", (uint32_t) err, errName, errStr);
 	}
 }

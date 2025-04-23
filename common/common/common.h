@@ -1,8 +1,5 @@
 #pragma once
 
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
-
 #include <string_view>
 #include <chrono>
 
@@ -27,9 +24,17 @@ private:
 
 #define SCOPED_TIMER(name) ScopedTimer hidden_scopedTimer(name)
 
+#define ASSET_PATH(path) ("../../../assets/" ## path)
+
+#if __CUDACC__
+
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+
 void cudaErrorPrint(cudaError_t err);
 
 #define CUDA_CHECK(expr) {			\
 	cudaError_t err = (expr);		\
 	cudaErrorPrint(err);			\
 }
+#endif

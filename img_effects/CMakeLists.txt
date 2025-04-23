@@ -4,6 +4,11 @@ set(TARGET img_effects)
 add_executable(
 	${TARGET} 
 	main.cpp
+	
+	shaders.h
+	shaders.cpp
+	
+	effects.h
 	effects.cu
 	)
 
@@ -21,4 +26,8 @@ target_link_libraries(
     common
     stb
 	glfw
+
+	d3d11.lib
+	dxgi.lib
+	d3dcompiler.lib
 )
