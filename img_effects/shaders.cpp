@@ -66,6 +66,9 @@ const char* const WindowQuad::getShaderSource() {
 			float2 uv: TEXCOORD0;
 		};
 
+		Texture2D<float4> outputTexture : register(t0);
+		SamplerState texSampler : register(s0);
+
 		VSOut VS_Main(uint vertexID: SV_VertexID, float4 position: SV_Position)
 		{
 			// Vertex positions in NDC (triangle list: 2 triangles = 6 vertices)
@@ -89,7 +92,8 @@ const char* const WindowQuad::getShaderSource() {
 
 		float4 PS_Main(VSOut psin) : SV_Target
 		{
-			return float4(psin.uv, 0, 1);
+			float4 texel = outputTexture.Sample(texSampler, psin.uv);
+			return texel;
 		}
 	)";
 }

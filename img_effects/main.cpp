@@ -28,6 +28,9 @@ using ComPtr = Microsoft::WRL::ComPtr<T>;
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 720
 
+int windowWidth = WINDOW_WIDTH;
+int windowHeight = WINDOW_HEIGHT;
+
 // d3d handles and states
 ComPtr<IDXGISwapChain> swapchain;
 
@@ -39,8 +42,13 @@ ComPtr<ID3D11RenderTargetView> renderTargetView;
 ComPtr<ID3D11InputLayout> inputLayout;
 ComPtr<ID3D11RasterizerState> rasterState;
 
+ComPtr<ID3D11Texture2D> outputTexture;
+ComPtr<ID3D11ShaderResourceView> outputTextureView;
+ComPtr<ID3D11SamplerState> samplerState;
+
 void obtainSwapchainResources();
 void setGraphicsPipelineState();
+void createOutputTexture(int width, int height);
 
 int main(void)
 {
@@ -50,7 +58,7 @@ int main(void)
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-	GLFWwindow* window = glfwCreateWindow(1280, 720, "image effects with cuda", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "image effects with cuda", nullptr, nullptr);
 	if (!window)
 	{
 		glfwTerminate();
@@ -59,8 +67,8 @@ int main(void)
 
 	DXGI_SWAP_CHAIN_DESC swapchainDesc = {
 		.BufferDesc = DXGI_MODE_DESC {
-			.Width = WINDOW_WIDTH,
-			.Height = WINDOW_HEIGHT,
+			.Width = (UINT) windowWidth,
+			.Height = (UINT) windowHeight,
 			.RefreshRate = DXGI_RATIONAL {
 				.Numerator = 0,
 				.Denominator = 0,
@@ -92,10 +100,14 @@ int main(void)
 	}
 
 	bool res = Shaders::windowQuad.compile();
-	assert(res);
+	if(!res) {
+		__debugbreak();
+	}
 
 	obtainSwapchainResources();
 	setGraphicsPipelineState();
+
+	createOutputTexture(windowWidth, windowHeight);
 
 	while (!glfwWindowShouldClose(window))
 	{
@@ -107,7 +119,11 @@ int main(void)
 		auto vertShader = Shaders::windowQuad.vertexShader.Get();
 
 		deviceContext->VSSetShader(Shaders::windowQuad.vertexShader.Get(), nullptr, 0);
+
 		deviceContext->PSSetShader(Shaders::windowQuad.pixelShader.Get(), nullptr, 0);
+		deviceContext->PSSetShaderResources(0, 1, outputTextureView.GetAddressOf());
+		deviceContext->PSSetSamplers(0, 1, samplerState.GetAddressOf());
+		
 		deviceContext->OMSetRenderTargets(1, renderTargetView.GetAddressOf(), nullptr);
 		
 		deviceContext->Draw(6, 0);
@@ -228,10 +244,62 @@ void setGraphicsPipelineState() {
 	D3D11_VIEWPORT viewport = {
 		.TopLeftX = 0,
 		.TopLeftY = 0,
-		.Width = WINDOW_WIDTH,
-		.Height = WINDOW_HEIGHT,
+		.Width = (float) windowWidth,
+		.Height = (float) windowHeight,
 		.MinDepth = 0,
 		.MaxDepth = 1,
 	};
 	deviceContext->RSSetViewports(1, &viewport);
+}
+
+void createOutputTexture(int width, int height) {
+	D3D11_TEXTURE2D_DESC textureDesc = {
+		.Width = (UINT) width,
+		.Height = (UINT) height,
+		.MipLevels = 1,
+		.ArraySize = 1,
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.SampleDesc = DXGI_SAMPLE_DESC {
+			.Count = 1,
+			.Quality = 0,
+		},
+		.Usage = D3D11_USAGE_DEFAULT,
+		.BindFlags = D3D11_BIND_SHADER_RESOURCE,
+		.CPUAccessFlags = 0,
+		.MiscFlags = 0,
+	};
+
+	if(FAILED(device->CreateTexture2D(&textureDesc, nullptr, &outputTexture))) {
+		std::fprintf(stderr, "CreateTexture2D failed");
+	}
+	
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = D3D11_TEX2D_SRV {
+			.MostDetailedMip = 0,
+			.MipLevels = 1,
+		},
+	};
+	
+	if(FAILED(device->CreateShaderResourceView(outputTexture.Get(), &srvDesc, &outputTextureView))) {
+		std::fprintf(stderr, "CreateShaderResourceView failed");
+	} 
+
+	D3D11_SAMPLER_DESC samplerDesc = {
+		.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT,
+		.AddressU = D3D11_TEXTURE_ADDRESS_WRAP,
+		.AddressV = D3D11_TEXTURE_ADDRESS_WRAP,
+		.AddressW = D3D11_TEXTURE_ADDRESS_WRAP,
+		.MipLODBias = 0,
+		.MaxAnisotropy = 1,
+		.ComparisonFunc = D3D11_COMPARISON_NEVER,
+		.BorderColor = {0, 0, 0, 0},
+		.MinLOD = 0,
+		.MaxLOD = D3D11_FLOAT32_MAX,
+	};
+
+	if(FAILED(device->CreateSamplerState(&samplerDesc, &samplerState))) {
+		std::fprintf(stderr, "CreateSamplerState failed");
+	}
 }
