@@ -6,6 +6,10 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 
+#include <imgui.h>
+#include <backends/imgui_impl_dx11.h>
+#include <backends/imgui_impl_glfw.h>
+
 #define NOMINMAX
 #include <d3d11_1.h>
 #include <wrl.h>
@@ -109,8 +113,26 @@ int main(void)
 
 	createOutputTexture(windowWidth, windowHeight);
 
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplGlfw_InitForOther(window, true);
+	// ImGui_ImplGlfw_Init(YOUR_HWND);
+	ImGui_ImplDX11_Init(device.Get(), deviceContext.Get());
+
 	while (!glfwWindowShouldClose(window))
 	{
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+		ImGui::ShowDemoWindow(); // Show demo window! :)
+
 		const FLOAT clearColor[] = {0.0f, 1.0f, 0.0f, 1.0f};
 
 		deviceContext->ClearRenderTargetView(renderTargetView.Get(), clearColor);
@@ -128,7 +150,10 @@ int main(void)
 		
 		deviceContext->Draw(6, 0);
 
-		/* Swap front and back buffers */
+		ImGui::Render();
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+		// present swapchain
 		if(FAILED(swapchain->Present(1, 0))) {
 			std::fprintf(stderr, "failed swapchain present\n");
 		}
@@ -147,6 +172,10 @@ int main(void)
 
 		glfwPollEvents();
 	}
+	
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 
 	glfwDestroyWindow(window);
 	glfwTerminate();

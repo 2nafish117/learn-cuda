@@ -26,6 +26,7 @@ target_link_libraries(
     common
     stb
 	glfw
+	imgui
 
 	d3d11.lib
 	dxgi.lib
