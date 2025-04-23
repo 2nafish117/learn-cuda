@@ -82,17 +82,28 @@ const char* const WindowQuad::getShaderSource() {
 				float2(-1.0,  1.0),
 			};
 
+			float2 uvs[6] = {
+				float2(0, 1),
+				float2(1, 1),
+				float2(0, 0), 
+
+				float2(1, 1),
+				float2(1, 0),
+				float2(0, 0),
+			};
+
 			VSOut vsout;
 			float2 pos = positions[vertexID];
 			vsout.position = float4(pos, 0, 1);
-			vsout.uv = pos * 0.5 + 0.5;
+			vsout.uv = uvs[vertexID];
 
 			return vsout;
 		}
 
 		float4 PS_Main(VSOut psin) : SV_Target
 		{
-			float4 texel = outputTexture.Sample(texSampler, psin.uv);
+			float2 uv = float2(psin.uv.x, psin.uv.y);
+			float4 texel = outputTexture.Sample(texSampler, uv);
 			return texel;
 		}
 	)";

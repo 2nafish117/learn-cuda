@@ -46,13 +46,92 @@ ComPtr<ID3D11RenderTargetView> renderTargetView;
 ComPtr<ID3D11InputLayout> inputLayout;
 ComPtr<ID3D11RasterizerState> rasterState;
 
+ComPtr<ID3D11SamplerState> samplerState;
+
+ComPtr<ID3D11Texture2D> inputTexture;
+ComPtr<ID3D11ShaderResourceView> inputTextureView;
+
 ComPtr<ID3D11Texture2D> outputTexture;
 ComPtr<ID3D11ShaderResourceView> outputTextureView;
-ComPtr<ID3D11SamplerState> samplerState;
 
 void obtainSwapchainResources();
 void setGraphicsPipelineState();
 void createOutputTexture(int width, int height);
+
+void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
+	D3D11_TEXTURE2D_DESC textureDesc = {
+		.Width = (UINT) width,
+		.Height = (UINT) height,
+		.MipLevels = 1,
+		.ArraySize = 1,
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.SampleDesc = DXGI_SAMPLE_DESC {
+			.Count = 1,
+			.Quality = 0,
+		},
+		.Usage = D3D11_USAGE_DYNAMIC,
+		.BindFlags = D3D11_BIND_SHADER_RESOURCE,
+		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+		.MiscFlags = 0,
+	};
+
+	if(FAILED(device->CreateTexture2D(&textureDesc, nullptr, &texture))) {
+		std::fprintf(stderr, "CreateTexture2D failed");
+	}
+	
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = D3D11_TEX2D_SRV {
+			.MostDetailedMip = 0,
+			.MipLevels = 1,
+		},
+	};
+	
+	if(FAILED(device->CreateShaderResourceView(inputTexture.Get(), &srvDesc, &srv))) {
+		std::fprintf(stderr, "CreateShaderResourceView failed");
+	}
+}
+
+void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
+	texture.Reset();
+	srv.Reset();
+}
+
+void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
+	std::printf("drop callback\n");
+	
+	for(int i = 0; i < path_count; ++i) {
+		const char* path = paths[i];
+		std::printf("%s\n", path);
+	}
+
+	if(path_count > 0) {
+		// we load only the first one
+		const char* path = paths[0];
+		int width, height, channels;
+		uint8_t* imgData = stbi_load(path, &width, &height, &channels, 4);
+		
+		if(imgData != nullptr) {
+			std::printf("loaded: %s\n", path);
+
+			releaseTextureAndView(inputTexture, inputTextureView);
+			createTextureAndView(width, height, inputTexture, inputTextureView);
+
+			D3D11_MAPPED_SUBRESOURCE subresource{};
+			if(!FAILED(deviceContext->Map(inputTexture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource))) {
+				memcpy(subresource.pData, imgData, width * height * 4);
+				deviceContext->Unmap(inputTexture.Get(), 0);
+
+				// Effects::testThing(inputTexture.Get());
+			} else {
+				std::fprintf(stderr, "resource Map failed\n");
+			}
+		}
+
+		stbi_image_free(imgData);
+	}
+}
 
 int main(void)
 {
@@ -68,6 +147,8 @@ int main(void)
 		glfwTerminate();
 		return -1;
 	}
+
+	glfwSetDropCallback(window, dropCallback);
 
 	DXGI_SWAP_CHAIN_DESC swapchainDesc = {
 		.BufferDesc = DXGI_MODE_DESC {
@@ -112,6 +193,7 @@ int main(void)
 	setGraphicsPipelineState();
 
 	createOutputTexture(windowWidth, windowHeight);
+	createTextureAndView(1, 1, inputTexture, inputTextureView);
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -143,7 +225,7 @@ int main(void)
 		deviceContext->VSSetShader(Shaders::windowQuad.vertexShader.Get(), nullptr, 0);
 
 		deviceContext->PSSetShader(Shaders::windowQuad.pixelShader.Get(), nullptr, 0);
-		deviceContext->PSSetShaderResources(0, 1, outputTextureView.GetAddressOf());
+		deviceContext->PSSetShaderResources(0, 1, inputTextureView.GetAddressOf());
 		deviceContext->PSSetSamplers(0, 1, samplerState.GetAddressOf());
 		
 		deviceContext->OMSetRenderTargets(1, renderTargetView.GetAddressOf(), nullptr);
@@ -172,7 +254,7 @@ int main(void)
 
 		glfwPollEvents();
 	}
-	
+
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
@@ -266,9 +348,6 @@ void setGraphicsPipelineState() {
 	// device->CreateBlendState()
 
 	deviceContext->RSSetState(rasterState.Get());
-	// const ID3D11RenderTargetView* renderTargetViews[] = {
-	// 	(const ID3D11RenderTargetView* const) renderTargetView.Get(),
-	// };
 
 	D3D11_VIEWPORT viewport = {
 		.TopLeftX = 0,
@@ -282,6 +361,7 @@ void setGraphicsPipelineState() {
 }
 
 void createOutputTexture(int width, int height) {
+
 	D3D11_TEXTURE2D_DESC textureDesc = {
 		.Width = (UINT) width,
 		.Height = (UINT) height,
@@ -313,7 +393,7 @@ void createOutputTexture(int width, int height) {
 	
 	if(FAILED(device->CreateShaderResourceView(outputTexture.Get(), &srvDesc, &outputTextureView))) {
 		std::fprintf(stderr, "CreateShaderResourceView failed");
-	} 
+	}
 
 	D3D11_SAMPLER_DESC samplerDesc = {
 		.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT,

@@ -18,9 +18,10 @@ cmake ..
 ## TODO
 
 1. effects
-   1. greyscale images
-   2. edge detection filter ...
-   3. show imgs with effects with ui in a window
+   1. whats wrong with benjamin franklin texture upload?
+   2. greyscale images
+   3. edge detection filter ...
+   4. show imgs with effects with ui in a window
 2. raytracer/pathtracer
 
 ## writeup on
