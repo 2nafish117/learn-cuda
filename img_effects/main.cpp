@@ -61,6 +61,8 @@ void createOutputTexture(int width, int height);
 void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
 void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
 
+void drawEffectsSettingsWindow();
+
 void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 	std::printf("drop callback\n");
 	
@@ -174,9 +176,7 @@ int main(void)
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
 
-	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOther(window, true);
-	// ImGui_ImplGlfw_Init(YOUR_HWND);
 	ImGui_ImplDX11_Init(device.Get(), deviceContext.Get());
 
 	while (!glfwWindowShouldClose(window))
@@ -184,7 +184,8 @@ int main(void)
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-		ImGui::ShowDemoWindow(); // Show demo window! :)
+		// ImGui::ShowDemoWindow();
+		drawEffectsSettingsWindow();
 
 		const FLOAT clearColor[] = {0.0f, 1.0f, 0.0f, 1.0f};
 
@@ -312,7 +313,7 @@ void setGraphicsPipelineState() {
 		std::fprintf(stderr, "CreateRasterizerState failed\n");
 	}
 
-	// we dont need to use these states 
+	// @NOTE: we dont need to use these states 
 	// D3D11_DEPTH_STENCIL_DESC depthStencilDesc;
 	// D3D11_BLEND_DESC blendDesc;
 	// device->CreateDepthStencilState()
@@ -423,4 +424,53 @@ void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& textur
 void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
 	texture.Reset();
 	srv.Reset();
+}
+
+void drawEffectsSettingsWindow() {
+	if(ImGui::Begin("Effects Settings")) {
+
+		// frame time graph
+		// if(ImGui::CollapsingHeader("Hello"))
+		{
+			constexpr int FRAME_TIME_BUFFER_SIZE = 64;
+	
+			static float frameTimes[FRAME_TIME_BUFFER_SIZE];
+			static float now;
+			static int offset;
+			static char overlay[64];
+			static float overlayUpdate;
+	
+			float prev = now;
+			now = glfwGetTime();
+			float deltaSec = now - prev;
+			float deltaMs = 1000 * deltaSec;
+	
+			frameTimes[offset] = deltaMs;
+			offset = (offset + 1) % FRAME_TIME_BUFFER_SIZE;
+	
+			if(now - overlayUpdate > 0.3) {
+				overlayUpdate = now;
+				
+				float avgFrameTime = 0;
+				float avgFrameRate = 0;
+				for(int i = 0; i < FRAME_TIME_BUFFER_SIZE; ++i) {
+					avgFrameTime += frameTimes[i];
+					avgFrameRate += 1000.0f / max(frameTimes[i], 0.000001);
+				}
+				avgFrameTime /= FRAME_TIME_BUFFER_SIZE;
+				avgFrameRate /= FRAME_TIME_BUFFER_SIZE;
+	
+				sprintf_s(overlay, "avg %.2fms (%.1f fps)", avgFrameTime, avgFrameRate);
+			}
+	
+			ImGui::PlotLines("frame time", frameTimes, 64, offset, overlay, 0, 100, ImVec2(0, 80.0f));
+		}
+
+		// effects settings
+		if(ImGui::CollapsingHeader("Hello2"))
+		{
+
+		}
+	}
+	ImGui::End();
 }
