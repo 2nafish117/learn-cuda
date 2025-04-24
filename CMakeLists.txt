@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(learn-cuda LANGUAGES CUDA CXX)
+project(learn-cuda LANGUAGES  C CXX CUDA)
 
 set(CMAKE_BUILD_TYPE Debug)
 

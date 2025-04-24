@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 
 set(TARGET img_effects)
+
 add_executable(
 	${TARGET} 
 	main.cpp
@@ -12,14 +13,16 @@ add_executable(
 	effects.cu
 	)
 
-set_property(TARGET ${TARGET} PROPERTY CUDA_ARCHITECTURES native)
-set_property(TARGET ${TARGET} PROPERTY CXX_STANDARD 20)
-
-set_target_properties(${TARGET} PROPERTIES
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+set_target_properties(${TARGET} PROPERTIES 
+	CUDA_SEPARABLE_COMPILATION ON
+	CUDA_ARCHITECTURES native
+	CUDA_RUNTIME_LIBRARY Static
+	CXX_STANDARD 20
 )
 
-# target_compile_options(${TARGET} PRIVATE -G)
+target_include_directories(${TARGET} PRIVATE
+    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
 
 target_link_libraries(
     ${TARGET}

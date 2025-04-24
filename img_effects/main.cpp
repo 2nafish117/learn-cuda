@@ -25,6 +25,8 @@
 #include <chrono>
 #include <random>
 #include <cassert>
+
+#include <cuda_runtime.h>
  
 template<typename T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;

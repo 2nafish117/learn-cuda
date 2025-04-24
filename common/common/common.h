@@ -3,6 +3,9 @@
 #include <string_view>
 #include <chrono>
 
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+
 class ScopedTimer final {
 public:
 	ScopedTimer(std::string_view name);
@@ -26,15 +29,9 @@ private:
 
 #define ASSET_PATH(path) ("../../../assets/" ## path)
 
-#if __CUDACC__
-
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
-
 void cudaErrorPrint(cudaError_t err);
 
 #define CUDA_CHECK(expr) {			\
 	cudaError_t err = (expr);		\
 	cudaErrorPrint(err);			\
 }
-#endif
