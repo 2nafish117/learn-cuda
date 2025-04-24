@@ -25,6 +25,17 @@ struct WindowQuad {
 	ComPtr<ID3DBlob> vertexShaderBytecode = nullptr;
 	ComPtr<ID3D11PixelShader> pixelShader = nullptr;
 
+	ComPtr<ID3D11Buffer> windowQuadDataBuffer = nullptr;
+
+	struct alignas(16) WindowQuadData {
+		float imageWidth;
+		float imageHeight;
+		float screenWidth;
+		float screenHeight;
+	};
+
+	void setWindowQuadData(const WindowQuadData& data);
+
 private:
 	const char* const getShaderSource();
 };

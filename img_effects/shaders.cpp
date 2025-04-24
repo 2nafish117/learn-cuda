@@ -56,7 +56,44 @@ bool WindowQuad::compile() {
 		}
 	}
 
+	// create cbuffers
+	{
+		WindowQuadData defaultData{
+			.imageWidth = 1,
+			.imageHeight = 1,
+		};
+
+		D3D11_BUFFER_DESC desc = {
+			.ByteWidth = sizeof(WindowQuadData),
+			.Usage = D3D11_USAGE_DYNAMIC,
+			.BindFlags = D3D11_BIND_CONSTANT_BUFFER,
+			.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+			.MiscFlags = 0,
+			.StructureByteStride = 0,
+		};
+
+		D3D11_SUBRESOURCE_DATA initData = {
+			.pSysMem = &defaultData,
+			.SysMemPitch = 0,
+			.SysMemSlicePitch = 0,
+		};
+
+		if(FAILED(device->CreateBuffer(&desc, &initData, &windowQuadDataBuffer))) {
+			std::fprintf(stderr, "CreateBuffer failed\n");
+		}
+	}
+
 	return !error;
+}
+
+void WindowQuad::setWindowQuadData(const WindowQuadData& data) {
+	D3D11_MAPPED_SUBRESOURCE subresource{};
+	if(!FAILED(deviceContext->Map(windowQuadDataBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource))) {
+		memcpy(subresource.pData, &data, sizeof(WindowQuadData));
+		deviceContext->Unmap(windowQuadDataBuffer.Get(), 0);
+	} else {
+		std::fprintf(stderr, "WindowQuad::setWindowQuadData Map failed\n");
+	}
 }
 
 const char* const WindowQuad::getShaderSource() {
@@ -68,6 +105,13 @@ const char* const WindowQuad::getShaderSource() {
 
 		Texture2D<float4> outputTexture : register(t0);
 		SamplerState texSampler : register(s0);
+
+		cbuffer WindowQuadData : register(b0) {
+			float imageWidth;
+			float imageHeight;
+			float screenWidth;
+			float screenHeight;
+		};
 
 		VSOut VS_Main(uint vertexID: SV_VertexID, float4 position: SV_Position)
 		{
@@ -102,7 +146,18 @@ const char* const WindowQuad::getShaderSource() {
 
 		float4 PS_Main(VSOut psin) : SV_Target
 		{
-			float2 uv = float2(psin.uv.x, psin.uv.y);
+			const float tiny = 0.00001;
+			const float imageRatio = imageWidth / max(imageHeight, tiny);
+			const float screenRatio = screenWidth / max(screenHeight, tiny);
+			const float ratio = imageRatio / max(screenRatio, tiny);
+
+			float2 uv;
+			if(ratio > 1) {
+				uv = float2(psin.uv.x, psin.uv.y * ratio);
+			} else {
+				uv = float2(psin.uv.x / ratio, psin.uv.y);
+			}
+
 			float4 texel = outputTexture.Sample(texSampler, uv);
 			return texel;
 		}

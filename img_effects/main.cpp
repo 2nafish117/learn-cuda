@@ -58,45 +58,8 @@ void obtainSwapchainResources();
 void setGraphicsPipelineState();
 void createOutputTexture(int width, int height);
 
-void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
-	D3D11_TEXTURE2D_DESC textureDesc = {
-		.Width = (UINT) width,
-		.Height = (UINT) height,
-		.MipLevels = 1,
-		.ArraySize = 1,
-		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-		.SampleDesc = DXGI_SAMPLE_DESC {
-			.Count = 1,
-			.Quality = 0,
-		},
-		.Usage = D3D11_USAGE_DYNAMIC,
-		.BindFlags = D3D11_BIND_SHADER_RESOURCE,
-		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
-		.MiscFlags = 0,
-	};
-
-	if(FAILED(device->CreateTexture2D(&textureDesc, nullptr, &texture))) {
-		std::fprintf(stderr, "CreateTexture2D failed");
-	}
-	
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-		.Texture2D = D3D11_TEX2D_SRV {
-			.MostDetailedMip = 0,
-			.MipLevels = 1,
-		},
-	};
-	
-	if(FAILED(device->CreateShaderResourceView(inputTexture.Get(), &srvDesc, &srv))) {
-		std::fprintf(stderr, "CreateShaderResourceView failed");
-	}
-}
-
-void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
-	texture.Reset();
-	srv.Reset();
-}
+void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
+void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
 
 void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 	std::printf("drop callback\n");
@@ -127,6 +90,14 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 			} else {
 				std::fprintf(stderr, "resource Map failed\n");
 			}
+
+			Shaders::WindowQuad::WindowQuadData windowQuadData = {
+				.imageWidth = (float) width,
+				.imageHeight = (float) height,
+				.screenWidth = (float) windowWidth,
+				.screenHeight = (float) windowHeight,
+			};
+			Shaders::windowQuad.setWindowQuadData(windowQuadData);
 		}
 
 		stbi_image_free(imgData);
@@ -225,6 +196,7 @@ int main(void)
 		deviceContext->VSSetShader(Shaders::windowQuad.vertexShader.Get(), nullptr, 0);
 
 		deviceContext->PSSetShader(Shaders::windowQuad.pixelShader.Get(), nullptr, 0);
+		deviceContext->PSSetConstantBuffers(0, 1, Shaders::windowQuad.windowQuadDataBuffer.GetAddressOf());
 		deviceContext->PSSetShaderResources(0, 1, inputTextureView.GetAddressOf());
 		deviceContext->PSSetSamplers(0, 1, samplerState.GetAddressOf());
 		
@@ -283,7 +255,6 @@ void obtainSwapchainResources() {
 	if (FAILED(swapchain->GetBuffer(0, IID_PPV_ARGS(&backBuffer)))) {
 		std::fprintf(stderr, "failed GetBuffer on swapchain\n");
 	}
-	assert(backBuffer.Get());
 
 	std::printf("obtained buffer from swapchain\n");
 
@@ -397,13 +368,13 @@ void createOutputTexture(int width, int height) {
 
 	D3D11_SAMPLER_DESC samplerDesc = {
 		.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT,
-		.AddressU = D3D11_TEXTURE_ADDRESS_WRAP,
-		.AddressV = D3D11_TEXTURE_ADDRESS_WRAP,
-		.AddressW = D3D11_TEXTURE_ADDRESS_WRAP,
+		.AddressU = D3D11_TEXTURE_ADDRESS_BORDER,
+		.AddressV = D3D11_TEXTURE_ADDRESS_BORDER,
+		.AddressW = D3D11_TEXTURE_ADDRESS_BORDER,
 		.MipLODBias = 0,
 		.MaxAnisotropy = 1,
 		.ComparisonFunc = D3D11_COMPARISON_NEVER,
-		.BorderColor = {0, 0, 0, 0},
+		.BorderColor = {0.2, 0.2, 0.2, 1},
 		.MinLOD = 0,
 		.MaxLOD = D3D11_FLOAT32_MAX,
 	};
@@ -411,4 +382,45 @@ void createOutputTexture(int width, int height) {
 	if(FAILED(device->CreateSamplerState(&samplerDesc, &samplerState))) {
 		std::fprintf(stderr, "CreateSamplerState failed");
 	}
+}
+
+
+void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
+	D3D11_TEXTURE2D_DESC textureDesc = {
+		.Width = (UINT) width,
+		.Height = (UINT) height,
+		.MipLevels = 1,
+		.ArraySize = 1,
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.SampleDesc = DXGI_SAMPLE_DESC {
+			.Count = 1,
+			.Quality = 0,
+		},
+		.Usage = D3D11_USAGE_DYNAMIC,
+		.BindFlags = D3D11_BIND_SHADER_RESOURCE,
+		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+		.MiscFlags = 0,
+	};
+
+	if(FAILED(device->CreateTexture2D(&textureDesc, nullptr, &texture))) {
+		std::fprintf(stderr, "CreateTexture2D failed");
+	}
+	
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = D3D11_TEX2D_SRV {
+			.MostDetailedMip = 0,
+			.MipLevels = 1,
+		},
+	};
+	
+	if(FAILED(device->CreateShaderResourceView(inputTexture.Get(), &srvDesc, &srv))) {
+		std::fprintf(stderr, "CreateShaderResourceView failed");
+	}
+}
+
+void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
+	texture.Reset();
+	srv.Reset();
 }
