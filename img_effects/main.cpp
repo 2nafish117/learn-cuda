@@ -79,6 +79,8 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 		int width, height, channels;
 		uint8_t* imgData = stbi_load(path, &width, &height, &channels, 4);
 		
+		size_t calculatedLen = width * height * 4;
+		
 		if(imgData != nullptr) {
 			std::printf("loaded: %s\n", path);
 
@@ -87,10 +89,17 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 
 			D3D11_MAPPED_SUBRESOURCE subresource{};
 			if(!FAILED(deviceContext->Map(inputTexture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource))) {
-				memcpy(subresource.pData, imgData, width * height * 4);
+				
+				// @NOTE: we do a memcpy for each row of the texture separately because the textures in d3d11 are 16 byte aligned
+				// and our data in cpu land may not be
+				for(int i = 0; i < height; ++i) {
+					size_t offset = i * width * 4;
+					size_t gpuOffset = i * subresource.RowPitch;
+					uint8_t* mappedPtr = (uint8_t*) subresource.pData + gpuOffset;
+					memcpy(mappedPtr, imgData + offset, width * 4);
+				}
+				
 				deviceContext->Unmap(inputTexture.Get(), 0);
-
-				// Effects::testThing(inputTexture.Get());
 			} else {
 				std::fprintf(stderr, "resource Map failed\n");
 			}
