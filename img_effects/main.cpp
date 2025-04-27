@@ -71,7 +71,7 @@ void createOutputTexture(int width, int height);
 void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
 void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
 
-void drawEffectsSettingsWindow();
+void drawTheWindow();
 
 void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 	std::printf("drop callback\n");
@@ -82,6 +82,7 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 	}
 
 	if(path_count > 0) {
+		SCOPED_TIMER("total texture upload");
 		// we load only the first one
 		const char* path = paths[0];
 		int width, height, channels;
@@ -120,6 +121,13 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 				.screenHeight = (float) windowHeight,
 			};
 			Shaders::windowQuad.setWindowQuadData(windowQuadData);
+
+			cudaGraphicsResource_t cudaTexture{};
+			cudaError_t err = cudaGraphicsD3D11RegisterResource(&cudaTexture, inputTexture.Get(), cudaGraphicsRegisterFlagsNone);
+
+
+			
+			err = cudaGraphicsUnregisterResource(cudaTexture);
 		}
 
 		stbi_image_free(imgData);
@@ -179,11 +187,13 @@ int main(void)
 		.Flags = 0,
 	};
 
+	UINT createFlags = D3D11_CREATE_DEVICE_DEBUG;
+
 	if(FAILED(D3D11CreateDeviceAndSwapChain(
 		pickedAdapter.Get(),
 		D3D_DRIVER_TYPE_UNKNOWN, 
 		nullptr,
-		D3D11_CREATE_DEVICE_DEBUG, 
+		createFlags, 
 		nullptr, 0, D3D11_SDK_VERSION, &swapchainDesc, &swapchain, &device, nullptr, &deviceContext))) 
 	{
 		std::fprintf(stderr, "D3D11CreateDeviceAndSwapChain failed\n");
@@ -250,8 +260,8 @@ int main(void)
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-		// ImGui::ShowDemoWindow();
-		drawEffectsSettingsWindow();
+		ImGui::ShowDemoWindow();
+		drawTheWindow();
 
 		const FLOAT clearColor[] = {0.0f, 1.0f, 0.0f, 1.0f};
 
@@ -502,7 +512,7 @@ void createOutputTexture(int width, int height) {
 	}
 
 	D3D11_SAMPLER_DESC samplerDesc = {
-		.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT,
+		.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT,
 		.AddressU = D3D11_TEXTURE_ADDRESS_BORDER,
 		.AddressV = D3D11_TEXTURE_ADDRESS_BORDER,
 		.AddressW = D3D11_TEXTURE_ADDRESS_BORDER,
@@ -559,14 +569,36 @@ void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11Shader
 	srv.Reset();
 }
 
-void drawEffectsSettingsWindow() {
-	if(ImGui::Begin("Effects Settings")) {
+void drawEffectsSettings(EffectsKind selectedEffect) {
+	switch(selectedEffect) {
+		case EffectsKind::None : {
+			ImGui::TextWrapped("we dont have any settings for none :), this just shows off the original image without any effects.");
+		} break;
+		case EffectsKind::Invert : {
+			ImGui::TextWrapped("we dont have any settings for invert :), this just inverts all the pixels.");
+		} break;
+		case EffectsKind::Greyscale : {
+			ImGui::TextWrapped("we dont have any settings for greyscale :), this just converts to greyscale");
+		} break;
+		case EffectsKind::Blur : {
+			static int xSize, ySize;
+			ImGui::SliderInt("x blur size", &xSize, 0, 32);
+			ImGui::SliderInt("y blur size", &ySize, 0, 32);
+		} break;
+		default: {
+
+		}
+	}
+}
+
+void drawTheWindow() {
+	if(ImGui::Begin("Window")) {
 
 		// frame time graph
-		if(ImGui::CollapsingHeader("Info"))
+		if(ImGui::CollapsingHeader("Info", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::Text("gpu: %s", pickedGpuDescription);
-			ImGui::Text("driver version: %lld", pickedGpuDriverVersion);
+			ImGui::TextWrapped("gpu: %s", pickedGpuDescription);
+			ImGui::TextWrapped("driver version: %lld", pickedGpuDriverVersion);
 
 			constexpr int FRAME_TIME_BUFFER_SIZE = 64;
 	
@@ -603,9 +635,12 @@ void drawEffectsSettingsWindow() {
 		}
 
 		// effects settings
-		if(ImGui::CollapsingHeader("Hello2"))
+		if(ImGui::CollapsingHeader("Effects Settings", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			static int selectedEffect = 0;
+			ImGui::Combo("Effects", &selectedEffect, effectsKindStrings, EffectsKind::Num);
 
+			drawEffectsSettings((EffectsKind) selectedEffect);
 		}
 	}
 	ImGui::End();

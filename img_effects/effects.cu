@@ -1,8 +1,5 @@
 #include <common/common.h>
 
-#include <cuda_d3d11_interop.h>
-// #include <cudaD3D11.h>
-
 namespace Effects {
 
 __global__
@@ -135,13 +132,6 @@ void greyscale_img(
 	CUDA_CHECK(cudaMemcpy(img_data, device_img_data, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
 	CUDA_CHECK(cudaFree(device_img_data));
 
-}
-
-class ID3D11Resource;
-void testThing(ID3D11Resource* pD3DResource)
-{
-	// cudaGraphicsResource* resource;
-	// cuGraphicsD3D11RegisterResource(&resource, pD3DResource, cudaGraphicsRegisterFlagsNone);
 }
 
 } // namespace Effects
