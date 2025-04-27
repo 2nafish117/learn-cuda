@@ -1,3 +1,5 @@
+#include "effects.h"
+
 #include <common/common.h>
 
 namespace Effects {
@@ -59,9 +61,7 @@ void greyscale_kernel(
 }
 
 void copyImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
-	// @TODO: this should be pitch, not width!! alignment issue!!
-	const size_t pitch = width * 4;
-	CUDA_CHECK(cudaMemcpy2DArrayToArray(outImgData, 0, 0, inImgData, 0, 0, pitch, height));
+	CUDA_CHECK(cudaMemcpy2DArrayToArray(outImgData, 0, 0, inImgData, 0, 0, width * 4, height));
 }
 
 void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
@@ -79,7 +79,7 @@ void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int h
 	CUDA_CHECK(cudaMemcpy2DFromArray(tempBuffer, pitch, inImgData, 0, 0, width * 4, height, cudaMemcpyDeviceToDevice));
 
 	// perform inversion on the tempBuffer
-	dim3 work = dim3(width * height * 4, 1, 1);
+	dim3 work = dim3(pitch * height, 1, 1);
 	dim3 numBlocks = dim3((work.x + 1023) / 1024, 1, 1);
 	dim3 numThreads = dim3(1024, 1, 1);
 
@@ -106,7 +106,7 @@ void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, in
 	CUDA_CHECK(cudaMemcpy2DFromArray(tempBuffer, pitch, inImgData, 0, 0, width * 4, height, cudaMemcpyDeviceToDevice));
 
 	// perform inversion on the tempBuffer
-	dim3 work = dim3(width * height, 1, 1);
+	dim3 work = dim3((pitch / 4) * height, 1, 1);
 	dim3 numBlocks = dim3((work.x + 1023) / 1024, 1, 1);
 	dim3 numThreads = dim3(1024, 1, 1);
 
@@ -120,14 +120,14 @@ void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, in
 
 // @TODO: blur params
 // @TODO: try blur with custom kernel?
-void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
+void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height, const BlurParams& params) {
 	SCOPED_TIMER(__FUNCTION__);
 
 }
 
 // @TODO: sobel params
-void sobelImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
-
+void sobelImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height, const SobelParams& params) {
+	SCOPED_TIMER(__FUNCTION__);
 }
 
 // void blur_img(uint8_t* img_data, int width, int height, const int channels, int blur_amt)

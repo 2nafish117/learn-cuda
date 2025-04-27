@@ -15,6 +15,7 @@ public:
 		using namespace std::chrono;
 		using namespace std::chrono_literals;
 
+		m_stop = high_resolution_clock::now();
 		duration<double> duration = m_stop - m_start;
 		return duration.count();
 	}

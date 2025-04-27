@@ -10,11 +10,11 @@ enum EffectsKind {
 	Num
 };
 
-const char* effectsKindStrings[] = {
+static const char* const effectsKindStrings[] = {
 	"None",
 	"Invert",
 	"Greyscale",
-	"Blur (Box)",
+	"Blur",
 	"Sobel (Edge Detect)",
 };
 
@@ -23,7 +23,16 @@ namespace Effects {
 void copyImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
 void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
 void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
-void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
-void sobelImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
+
+struct BlurParams {
+	int xSize;
+	int ySize;
+};
+void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height, const BlurParams& params);
+
+struct SobelParams {
+	
+};
+void sobelImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height, const SobelParams& params);
 
 } // namespace Effects

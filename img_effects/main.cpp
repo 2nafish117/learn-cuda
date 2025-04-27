@@ -62,7 +62,6 @@ ComPtr<ID3D11ShaderResourceView> inputTextureView;
 ComPtr<ID3D11Texture2D> outputTexture;
 ComPtr<ID3D11ShaderResourceView> outputTextureView;
 
-
 // cuda mapped d3d11 resources 
 struct CudaImage {
 	// handle to the graphics resource
@@ -77,6 +76,12 @@ CudaImage cudaOutputImage{};
 
 // imgui state
 int selectedEffect = 0;
+float effectCalculationTimeMs = 0;
+// @TODO: set this to true only when we need to recalculate
+bool needCalculateEffect = true;
+
+Effects::BlurParams blurParams{};
+Effects::SobelParams sobelParams{};
 
 void obtainSwapchainResources();
 void enumAdapters(std::vector<ComPtr<IDXGIAdapter>>& outAdapters);
@@ -293,9 +298,6 @@ int main(void)
 		font_config.RasterizerMultiply = 1.0;
 		font_config.GlyphOffset = ImVec2{0.0, -1.0};
 
-		// @TODO: need more fonts?
-		// io.Fonts->AddFontFromFileTTF("assets/fa-regular-400.ttf", 14.0, &font_config, FA_RANGES);
-
 		font_config.MergeMode = false;
 	}
 
@@ -304,12 +306,10 @@ int main(void)
 
 	while (!glfwWindowShouldClose(window))
 	{
-		// SCOPED_TIMER("frame time");
-
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-		ImGui::ShowDemoWindow();
+		// ImGui::ShowDemoWindow();
 		drawTheWindow();
 
 		applyEffect((EffectsKind) selectedEffect);
@@ -363,20 +363,6 @@ int main(void)
 	glfwTerminate();
 	return 0;
 }
-
-// int main() {
-// 	int width, height, channels;
-
-// 	const int desired_channels = 3;
-// 	uint8_t* data = stbi_load(ASSET_PATH("/guy_behind_car.jpg"), &width, &height, &channels, desired_channels);
-
-// 	Effects::blur_img(data, width, height, desired_channels, 32);
-// 	stbi_write_jpg(ASSET_PATH("/blurred_guy_behind_car.jpg"), width, height, desired_channels, data, 100);
-
-// 	stbi_image_free(data);
-
-// 	return 0;
-// }
 
 void enumAdapters(std::vector<ComPtr<IDXGIAdapter>>& outAdapters) {
 	// hard upper bound 512, who has more than 512 gpus?
@@ -575,10 +561,9 @@ void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11Shader
 
 void applyEffect(EffectsKind selectedEffect)
 {
-	if(cudaInputImage.texture && cudaOutputImage.texture) {
-		SCOPED_TIMER("apply effect");
+	if(needCalculateEffect && cudaInputImage.texture && cudaOutputImage.texture) {
+		auto timer = ScopedTimer("apply effect");
 		
-		// is this safe? d3d11 may be asyncronously executing?
 		CUDA_CHECK(cudaGraphicsMapResources(1, &cudaInputImage.texture));
 		CUDA_CHECK(cudaGraphicsMapResources(1, &cudaOutputImage.texture));
 		
@@ -603,10 +588,10 @@ void applyEffect(EffectsKind selectedEffect)
 				Effects::greyscaleImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
 			} break;
 			case EffectsKind::Blur : {
-				Effects::blurImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+				Effects::blurImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height, blurParams);
 			} break;
 			case EffectsKind::Sobel : {
-				Effects::sobelImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+				Effects::sobelImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height, sobelParams);
 			} break;
 			default: {
 				// this shouldnt happen
@@ -616,11 +601,14 @@ void applyEffect(EffectsKind selectedEffect)
 
 		CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaInputImage.texture));
 		CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaOutputImage.texture));
+
+		effectCalculationTimeMs = 1000 * timer.Elapsed();
 	}
 }
 
 void drawEffectsSettings(EffectsKind selectedEffect) {
-	ImGui::Text("@TODO: time taken for operation");
+	ImGui::TextWrapped("effect calculation time: %.3fms", effectCalculationTimeMs);
+	ImGui::Separator();
 	switch(selectedEffect) {
 		case EffectsKind::None : {
 			ImGui::TextWrapped("we dont have any settings for none :), this just shows off the original image without any effects.");
@@ -632,9 +620,10 @@ void drawEffectsSettings(EffectsKind selectedEffect) {
 			ImGui::TextWrapped("we dont have any settings for greyscale :), this just converts to greyscale");
 		} break;
 		case EffectsKind::Blur : {
-			static int xSize, ySize;
-			ImGui::SliderInt("x blur size", &xSize, 0, 32);
-			ImGui::SliderInt("y blur size", &ySize, 0, 32);
+			ImGui::InputInt("x blur size", &blurParams.xSize, 2, 2);
+			ImGui::InputInt("y blur size", &blurParams.ySize, 2, 2);
+			blurParams.xSize = std::clamp(blurParams.xSize, 1, 31);
+			blurParams.ySize = std::clamp(blurParams.ySize, 1, 31);
 		} break;
 		case EffectsKind::Sobel : {
 			static int xSize, ySize;
@@ -656,6 +645,7 @@ void drawTheWindow() {
 		{
 			ImGui::TextWrapped("gpu: %s", pickedGpuDescription);
 			ImGui::TextWrapped("driver version: %lld", pickedGpuDriverVersion);
+			ImGui::Separator();
 
 			constexpr int FRAME_TIME_BUFFER_SIZE = 64;
 	

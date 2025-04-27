@@ -13,8 +13,7 @@ ScopedTimer::~ScopedTimer() {
 	using namespace std::chrono;
 	using namespace std::chrono_literals;
 
-	m_stop = high_resolution_clock::now();
-	std::printf("%s elapsed %f\n", m_name.data(), Elapsed());
+	std::printf("%s elapsed %.3fms\n", m_name.data(), 1000 * Elapsed());
 }
 
 void cudaErrorPrint(cudaError_t err) {
