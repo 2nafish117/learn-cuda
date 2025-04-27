@@ -11,7 +11,6 @@ public:
 	ScopedTimer(std::string_view name);
 	~ScopedTimer();
 
-private:
 	inline double Elapsed() {
 		using namespace std::chrono;
 		using namespace std::chrono_literals;
@@ -19,7 +18,8 @@ private:
 		duration<double> duration = m_stop - m_start;
 		return duration.count();
 	}
-
+	
+private:
 	std::string_view m_name;
 	std::chrono::high_resolution_clock::time_point m_start{};
 	std::chrono::high_resolution_clock::time_point m_stop{};

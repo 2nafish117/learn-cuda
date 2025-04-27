@@ -4,31 +4,11 @@ namespace Effects {
 
 __global__
 void invert_kernel(
-	uint8_t* img_data, 
-	const int width, const int height, const int channels) 
-{
-	const size_t pixel_index = blockDim.x * blockIdx.x + threadIdx.x;
-
-	for(int i = 0; i < channels; ++i) {
-		const size_t comp_index = channels * pixel_index + i;
-		uint8_t comp_val = img_data[comp_index];
-		img_data[comp_index] = 255 - comp_val;
-	}
-}
-
-__global__
-void invert_kernel2(
-	cudaArray_t inImgData, cudaArray_t outImgData, 
+	uint8_t* imgData, 
 	const int width, const int height) 
 {
 	const size_t pixel_index = blockDim.x * blockIdx.x + threadIdx.x;
-
-	// tex1D<float>(inImgData, 1, 2);
-	// for(int i = 0; i < 4; ++i) {
-	// 	const size_t comp_index = 4 * pixel_index + i;
-	// 	uint8_t comp_val = in_img_data[comp_index];
-	// 	out_img_data[comp_index] = 255 - comp_val;
-	// }
+	imgData[pixel_index] = 255 - imgData[pixel_index];
 }
 
 __global__
@@ -65,71 +45,89 @@ void blur_kernel(
 
 __global__
 void greyscale_kernel(
-	uchar4* img_data,
-	uchar4* out_img_data,
-	int width, int height)
+	uchar4* imgData, 
+	const int width, const int height) 
 {
-	size_t index = blockIdx.x * blockDim.x + threadIdx.x;
-	float red = 	(float) img_data[index].x / 255.0f;
-	float green = 	(float) img_data[index].y / 255.0f;
-	float blue = 	(float) img_data[index].z / 255.0f;
+	const size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+	const float red 	= (float) imgData[index].x;
+	const float green = (float) imgData[index].y;
+	const float blue 	= (float) imgData[index].z;
+	const float alpha = (float) imgData[index].w;
 
-	float greyscale = 0.299f * red + 0.587f * green + 0.114f * blue;
-	out_img_data[index] = uchar4(greyscale * 255.0f);
-}
-
-void invert_img(
-	uint8_t* img_data, 
-	int width, int height, const int channels) 
-{
-	SCOPED_TIMER(__FUNCTION__);
-
-	const size_t size = width * height * channels;
-	uint8_t* device_img_data = nullptr;
-
-	CUDA_CHECK(cudaMalloc(&device_img_data, size));
-	CUDA_CHECK(cudaMemcpy(device_img_data, img_data, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
-
-	dim3 work = dim3(width * height, 1, 1);
-	dim3 numBlocks = dim3((work.x + 1023) / 1024, 1, 1);
-	dim3 numThreads = dim3(1024, 1, 1);
-
-	// @TODO: get device pointer here???
-	invert_kernel<<<numBlocks, numThreads>>>(device_img_data, width, height, channels);
-	cudaErrorPrint(cudaGetLastError());
-
-	CUDA_CHECK(cudaMemcpy(img_data, device_img_data, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaFree(device_img_data));
+	const float greyscale = 0.299f * red + 0.587f * green + 0.114f * blue;
+	imgData[index] = uchar4(greyscale, greyscale, greyscale, alpha);
 }
 
 void copyImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
-	CUDA_CHECK(cudaMemcpy2DArrayToArray(outImgData, 0, 0, inImgData, 0, 0, width * 4, height));
+	// @TODO: this should be pitch, not width!! alignment issue!!
+	const size_t pitch = width * 4;
+	CUDA_CHECK(cudaMemcpy2DArrayToArray(outImgData, 0, 0, inImgData, 0, 0, pitch, height));
 }
 
 void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
 	SCOPED_TIMER(__FUNCTION__);
 
-	// @TODO: cuda cannot directly modify a d3d texture via mapping and using the cudaArray, we need to memcpy to the array from
-	// a separate buffer that we wrote to
-	// cudaMallocPitch()
+	// @NOTE: cuda cannot directly modify a d3d texture via mapping and using the cudaArray, 
+	// we need to use a temporary and memcpy the temporary to the array
 
-	// we know the image has 4 components, rgba
-	const size_t size = width * height * 4;
+	// @NOTE: we know the image has 4 components, rgba
+	
+	// copy inImgData to a temp buffer
+	uint8_t* tempBuffer{};
+	size_t pitch{};
+	CUDA_CHECK(cudaMallocPitch(&tempBuffer, &pitch, width * 4, height));
+	CUDA_CHECK(cudaMemcpy2DFromArray(tempBuffer, pitch, inImgData, 0, 0, width * 4, height, cudaMemcpyDeviceToDevice));
 
+	// perform inversion on the tempBuffer
+	dim3 work = dim3(width * height * 4, 1, 1);
+	dim3 numBlocks = dim3((work.x + 1023) / 1024, 1, 1);
+	dim3 numThreads = dim3(1024, 1, 1);
+
+	invert_kernel<<<numBlocks, numThreads>>>(tempBuffer, width, height);
+	cudaErrorPrint(cudaGetLastError());
+
+	// copy temp into outImgData array
+	CUDA_CHECK(cudaMemcpy2DToArray(outImgData, 0, 0, tempBuffer, pitch, width * 4, height, cudaMemcpyDeviceToDevice));
+	CUDA_CHECK(cudaFree(tempBuffer));
+}
+
+void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
+	SCOPED_TIMER(__FUNCTION__);
+
+	// @NOTE: cuda cannot directly modify a d3d texture via mapping and using the cudaArray, 
+	// we need to use a temporary and memcpy the temporary to the array
+
+	// @NOTE: we know the image has 4 components, rgba
+	
+	// copy inImgData to a temp buffer
+	uint8_t* tempBuffer{};
+	size_t pitch{};
+	CUDA_CHECK(cudaMallocPitch(&tempBuffer, &pitch, width * 4, height));
+	CUDA_CHECK(cudaMemcpy2DFromArray(tempBuffer, pitch, inImgData, 0, 0, width * 4, height, cudaMemcpyDeviceToDevice));
+
+	// perform inversion on the tempBuffer
 	dim3 work = dim3(width * height, 1, 1);
 	dim3 numBlocks = dim3((work.x + 1023) / 1024, 1, 1);
 	dim3 numThreads = dim3(1024, 1, 1);
 
-	invert_kernel2<<<numBlocks, numThreads>>>(inImgData, outImgData, width, height);
+	greyscale_kernel<<<numBlocks, numThreads>>>((uchar4*) tempBuffer, width, height);
 	cudaErrorPrint(cudaGetLastError());
+
+	// copy temp into outImgData array
+	CUDA_CHECK(cudaMemcpy2DToArray(outImgData, 0, 0, tempBuffer, pitch, width * 4, height, cudaMemcpyDeviceToDevice));
+	CUDA_CHECK(cudaFree(tempBuffer));
 }
 
-void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
-	// @TODO:
-}
-
+// @TODO: blur params
+// @TODO: try blur with custom kernel?
 void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
-	// @TODO:
+	SCOPED_TIMER(__FUNCTION__);
+
+}
+
+// @TODO: sobel params
+void sobelImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
+
 }
 
 // void blur_img(uint8_t* img_data, int width, int height, const int channels, int blur_amt)
@@ -154,28 +152,6 @@ void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int hei
 	
 // 	CUDA_CHECK(cudaFree(device_img_data));
 // 	CUDA_CHECK(cudaFree(device_blurred_img_data));
-// }
-
-// void greyscale_img(
-// 	uint8_t* img_data, 
-// 	uint8_t* out_img_data, 
-// 	int width, int height)
-// {
-// 	SCOPED_TIMER(__FUNCTION__);
-	
-// 	const size_t size = width * height;
-
-// 	uchar4* device_img_data = nullptr;
-// 	CUDA_CHECK(cudaMalloc(&device_img_data, size));
-// 	CUDA_CHECK(cudaMemcpy(device_img_data, img_data, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
-	
-// 	dim3 work = dim3(width, height, 1);
-// 	dim3 numBlocks = dim3((width + 31) / 32, (height + 31) / 32, 1);
-// 	dim3 numThreads = dim3(32, 32, 1);
-// 	greyscale_kernel<<<1, 1>>>(device_img_data, device_img_data, width, height);
-	
-// 	CUDA_CHECK(cudaMemcpy(img_data, device_img_data, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
-// 	CUDA_CHECK(cudaFree(device_img_data));
 // }
 
 } // namespace Effects

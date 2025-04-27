@@ -591,7 +591,7 @@ void applyEffect(EffectsKind selectedEffect)
 
 		cudaArray_t cudaOutputImageArray{};
 		CUDA_CHECK(cudaGraphicsSubResourceGetMappedArray(&cudaOutputImageArray, cudaOutputImage.texture, 0, 0));
-		
+
 		switch(selectedEffect) {
 			case EffectsKind::None : {
 				Effects::copyImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
@@ -600,10 +600,13 @@ void applyEffect(EffectsKind selectedEffect)
 				Effects::invertImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
 			} break;
 			case EffectsKind::Greyscale : {
-				// Effects::greyscaleImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+				Effects::greyscaleImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
 			} break;
 			case EffectsKind::Blur : {
-				// Effects::blurImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+				Effects::blurImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+			} break;
+			case EffectsKind::Sobel : {
+				Effects::sobelImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
 			} break;
 			default: {
 				// this shouldnt happen
@@ -617,6 +620,7 @@ void applyEffect(EffectsKind selectedEffect)
 }
 
 void drawEffectsSettings(EffectsKind selectedEffect) {
+	ImGui::Text("@TODO: time taken for operation");
 	switch(selectedEffect) {
 		case EffectsKind::None : {
 			ImGui::TextWrapped("we dont have any settings for none :), this just shows off the original image without any effects.");
@@ -631,6 +635,11 @@ void drawEffectsSettings(EffectsKind selectedEffect) {
 			static int xSize, ySize;
 			ImGui::SliderInt("x blur size", &xSize, 0, 32);
 			ImGui::SliderInt("y blur size", &ySize, 0, 32);
+		} break;
+		case EffectsKind::Sobel : {
+			static int xSize, ySize;
+			ImGui::SliderInt("x sobel size", &xSize, 0, 32);
+			ImGui::SliderInt("y sobel size", &ySize, 0, 32);
 		} break;
 		default: {
 			// this shouldnt happen
