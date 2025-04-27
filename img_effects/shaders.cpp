@@ -157,6 +157,7 @@ const char* const WindowQuad::getShaderSource() {
 			} else {
 				uv = float2(psin.uv.x / ratio, psin.uv.y);
 			}
+			// uv = float2(psin.uv.x, psin.uv.y);
 
 			float4 texel = outputTexture.Sample(texSampler, uv);
 			return texel;

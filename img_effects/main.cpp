@@ -82,9 +82,8 @@ void obtainSwapchainResources();
 void enumAdapters(std::vector<ComPtr<IDXGIAdapter>>& outAdapters);
 ComPtr<IDXGIAdapter> pickAdapter(const std::vector<ComPtr<IDXGIAdapter>>& adapters);
 void setGraphicsPipelineState();
-void createOutputTexture(int width, int height);
 
-void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
+void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv, bool isInput);
 void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
 
 // updates the textures with cuda
@@ -122,13 +121,17 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 
 			// we need to release the old one and recreate textures, because we cannot resize textures in place
 			releaseTextureAndView(inputTexture, inputTextureView);
-			createTextureAndView(width, height, inputTexture, inputTextureView);
+			createTextureAndView(width, height, inputTexture, inputTextureView, true);
+
+			releaseTextureAndView(outputTexture, outputTextureView);
+			createTextureAndView(width, height, outputTexture, outputTextureView, false);
 
 			D3D11_MAPPED_SUBRESOURCE subresource{};
 			if(!FAILED(deviceContext->Map(inputTexture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource))) {
 				
 				// @NOTE: we do a memcpy for each row of the texture separately because the textures in d3d11 are 16 byte aligned
 				// and our data in cpu land may not be
+				// memcpy(subresource.pData, imgData, width * height * 4); // this is incorrect!!
 				for(int i = 0; i < height; ++i) {
 					size_t offset = i * width * 4;
 					size_t gpuOffset = i * subresource.RowPitch;
@@ -235,8 +238,25 @@ int main(void)
 	obtainSwapchainResources();
 	setGraphicsPipelineState();
 
-	createOutputTexture(windowWidth, windowHeight);
-	createTextureAndView(1, 1, inputTexture, inputTextureView);
+	D3D11_SAMPLER_DESC samplerDesc = {
+		.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT,
+		.AddressU = D3D11_TEXTURE_ADDRESS_BORDER,
+		.AddressV = D3D11_TEXTURE_ADDRESS_BORDER,
+		.AddressW = D3D11_TEXTURE_ADDRESS_BORDER,
+		.MipLODBias = 0,
+		.MaxAnisotropy = 1,
+		.ComparisonFunc = D3D11_COMPARISON_NEVER,
+		.BorderColor = {0.2, 0.2, 0.2, 1},
+		.MinLOD = 0,
+		.MaxLOD = D3D11_FLOAT32_MAX,
+	};
+
+	if(FAILED(device->CreateSamplerState(&samplerDesc, &samplerState))) {
+		std::fprintf(stderr, "CreateSamplerState failed");
+	}
+
+	createTextureAndView(1, 1, inputTexture, inputTextureView, true);
+	createTextureAndView(1, 1, outputTexture, outputTextureView, false);
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -507,8 +527,7 @@ void setGraphicsPipelineState() {
 	deviceContext->RSSetViewports(1, &viewport);
 }
 
-void createOutputTexture(int width, int height) {
-
+void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv, bool isInput) {
 	D3D11_TEXTURE2D_DESC textureDesc = {
 		.Width = (UINT) width,
 		.Height = (UINT) height,
@@ -519,63 +538,17 @@ void createOutputTexture(int width, int height) {
 			.Count = 1,
 			.Quality = 0,
 		},
-		.Usage = D3D11_USAGE_DEFAULT,
 		.BindFlags = D3D11_BIND_SHADER_RESOURCE,
-		.CPUAccessFlags = 0,
 		.MiscFlags = 0,
 	};
 
-	if(FAILED(device->CreateTexture2D(&textureDesc, nullptr, &outputTexture))) {
-		std::fprintf(stderr, "CreateTexture2D failed");
+	if(isInput) {
+		textureDesc.Usage = D3D11_USAGE_DYNAMIC;
+		textureDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	} else {
+		textureDesc.Usage = D3D11_USAGE_DEFAULT;
+		textureDesc.CPUAccessFlags = 0;
 	}
-	
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-		.Texture2D = D3D11_TEX2D_SRV {
-			.MostDetailedMip = 0,
-			.MipLevels = 1,
-		},
-	};
-	
-	if(FAILED(device->CreateShaderResourceView(outputTexture.Get(), &srvDesc, &outputTextureView))) {
-		std::fprintf(stderr, "CreateShaderResourceView failed");
-	}
-
-	D3D11_SAMPLER_DESC samplerDesc = {
-		.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT,
-		.AddressU = D3D11_TEXTURE_ADDRESS_BORDER,
-		.AddressV = D3D11_TEXTURE_ADDRESS_BORDER,
-		.AddressW = D3D11_TEXTURE_ADDRESS_BORDER,
-		.MipLODBias = 0,
-		.MaxAnisotropy = 1,
-		.ComparisonFunc = D3D11_COMPARISON_NEVER,
-		.BorderColor = {0.2, 0.2, 0.2, 1},
-		.MinLOD = 0,
-		.MaxLOD = D3D11_FLOAT32_MAX,
-	};
-
-	if(FAILED(device->CreateSamplerState(&samplerDesc, &samplerState))) {
-		std::fprintf(stderr, "CreateSamplerState failed");
-	}
-}
-
-void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
-	D3D11_TEXTURE2D_DESC textureDesc = {
-		.Width = (UINT) width,
-		.Height = (UINT) height,
-		.MipLevels = 1,
-		.ArraySize = 1,
-		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-		.SampleDesc = DXGI_SAMPLE_DESC {
-			.Count = 1,
-			.Quality = 0,
-		},
-		.Usage = D3D11_USAGE_DYNAMIC,
-		.BindFlags = D3D11_BIND_SHADER_RESOURCE,
-		.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
-		.MiscFlags = 0,
-	};
 
 	if(FAILED(device->CreateTexture2D(&textureDesc, nullptr, &texture))) {
 		std::fprintf(stderr, "CreateTexture2D failed");
@@ -590,7 +563,7 @@ void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& textur
 		},
 	};
 	
-	if(FAILED(device->CreateShaderResourceView(inputTexture.Get(), &srvDesc, &srv))) {
+	if(FAILED(device->CreateShaderResourceView(texture.Get(), &srvDesc, &srv))) {
 		std::fprintf(stderr, "CreateShaderResourceView failed");
 	}
 }
@@ -621,7 +594,7 @@ void applyEffect(EffectsKind selectedEffect)
 		
 		switch(selectedEffect) {
 			case EffectsKind::None : {
-				// @TODO: copy?
+				Effects::copyImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
 			} break;
 			case EffectsKind::Invert : {
 				Effects::invertImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);

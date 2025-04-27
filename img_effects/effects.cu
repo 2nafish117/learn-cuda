@@ -102,6 +102,10 @@ void invert_img(
 	CUDA_CHECK(cudaFree(device_img_data));
 }
 
+void copyImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
+	CUDA_CHECK(cudaMemcpy2DArrayToArray(outImgData, 0, 0, inImgData, 0, 0, width * 4, height));
+}
+
 void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
 	SCOPED_TIMER(__FUNCTION__);
 
