@@ -14,13 +14,15 @@ ScopedTimer::~ScopedTimer() {
 	using namespace std::chrono_literals;
 
 	m_stop = high_resolution_clock::now();
-	std::printf("%s elapsed %f", m_name.data(), Elapsed());
+	std::printf("%s elapsed %f\n", m_name.data(), Elapsed());
 }
 
 void cudaErrorPrint(cudaError_t err) {
 	if(err != cudaSuccess) {
 		const char* errStr = cudaGetErrorString(err);
 		const char* errName = cudaGetErrorName(err);
-		std::printf("[cuda error %d] %s %s", (uint32_t) err, errName, errStr);
+		std::fprintf(stderr, "[cuda error %d] %s %s\n", (uint32_t) err, errName, errStr);
+		std::fflush(stdout);
+		std::fflush(stderr);
 	}
 }

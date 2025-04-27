@@ -18,8 +18,12 @@ const char* effectsKindStrings[] = {
 
 namespace Effects {
 	
-void invert_img(uint8_t* img_data, int width, int height, const int channels);
-void blur_img(uint8_t* img_data, int width, int height, const int channels, int blur_amt);
+// void invert_img(uint8_t* img_data, int width, int height, const int channels);
+// void blur_img(uint8_t* img_data, int width, int height, const int channels, int blur_amt);
 // void greyscale_img(uint8_t* img_data, int width, int height, const int channels, int blur_amt);
+
+void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
+void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
+void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
 
 } // namespace Effects

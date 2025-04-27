@@ -17,6 +17,21 @@ void invert_kernel(
 }
 
 __global__
+void invert_kernel2(
+	cudaArray_t inImgData, cudaArray_t outImgData, 
+	const int width, const int height) 
+{
+	const size_t pixel_index = blockDim.x * blockIdx.x + threadIdx.x;
+
+	// tex1D<float>(inImgData, 1, 2);
+	// for(int i = 0; i < 4; ++i) {
+	// 	const size_t comp_index = 4 * pixel_index + i;
+	// 	uint8_t comp_val = in_img_data[comp_index];
+	// 	out_img_data[comp_index] = 255 - comp_val;
+	// }
+}
+
+__global__
 void blur_kernel(
 	const uint8_t* __restrict__ img_data,
 	uint8_t* __restrict__ blurred_img_data, 
@@ -87,51 +102,76 @@ void invert_img(
 	CUDA_CHECK(cudaFree(device_img_data));
 }
 
-void blur_img(uint8_t* img_data, int width, int height, const int channels, int blur_amt)
-{
+void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
 	SCOPED_TIMER(__FUNCTION__);
-	const size_t size = width * height * channels;
 
-	uint8_t* device_img_data = nullptr;
-	CUDA_CHECK(cudaMalloc(&device_img_data, size));
-	CUDA_CHECK(cudaMemcpy(device_img_data, img_data, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
-	
-	uint8_t* device_blurred_img_data = nullptr;
-	CUDA_CHECK(cudaMalloc(&device_blurred_img_data, size));
+	// @TODO: cuda cannot directly modify a d3d texture via mapping and using the cudaArray, we need to memcpy to the array from
+	// a separate buffer that we wrote to
+	// cudaMallocPitch()
 
-	dim3 work = dim3(width, height, 1);
-	dim3 numBlocks = dim3((width + 31) / 32, (height + 31) / 32, 1);
-	dim3 numThreads = dim3(32, 32, 1);
-	blur_kernel<<<numBlocks, numThreads>>>(device_img_data, device_blurred_img_data, width, height, channels, blur_amt);
+	// we know the image has 4 components, rgba
+	const size_t size = width * height * 4;
+
+	dim3 work = dim3(width * height, 1, 1);
+	dim3 numBlocks = dim3((work.x + 1023) / 1024, 1, 1);
+	dim3 numThreads = dim3(1024, 1, 1);
+
+	invert_kernel2<<<numBlocks, numThreads>>>(inImgData, outImgData, width, height);
 	cudaErrorPrint(cudaGetLastError());
-
-	CUDA_CHECK(cudaMemcpy(img_data, device_blurred_img_data, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
-	
-	CUDA_CHECK(cudaFree(device_img_data));
-	CUDA_CHECK(cudaFree(device_blurred_img_data));
 }
 
-void greyscale_img(
-	uint8_t* img_data, 
-	uint8_t* out_img_data, 
-	int width, int height)
-{
-	SCOPED_TIMER(__FUNCTION__);
-	
-	const size_t size = width * height;
-
-	uchar4* device_img_data = nullptr;
-	CUDA_CHECK(cudaMalloc(&device_img_data, size));
-	CUDA_CHECK(cudaMemcpy(device_img_data, img_data, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
-	
-	dim3 work = dim3(width, height, 1);
-	dim3 numBlocks = dim3((width + 31) / 32, (height + 31) / 32, 1);
-	dim3 numThreads = dim3(32, 32, 1);
-	greyscale_kernel<<<1, 1>>>(device_img_data, device_img_data, width, height);
-	
-	CUDA_CHECK(cudaMemcpy(img_data, device_img_data, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaFree(device_img_data));
-
+void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
+	// @TODO:
 }
+
+void blurImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height) {
+	// @TODO:
+}
+
+// void blur_img(uint8_t* img_data, int width, int height, const int channels, int blur_amt)
+// {
+// 	SCOPED_TIMER(__FUNCTION__);
+// 	const size_t size = width * height * channels;
+
+// 	uint8_t* device_img_data = nullptr;
+// 	CUDA_CHECK(cudaMalloc(&device_img_data, size));
+// 	CUDA_CHECK(cudaMemcpy(device_img_data, img_data, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
+	
+// 	uint8_t* device_blurred_img_data = nullptr;
+// 	CUDA_CHECK(cudaMalloc(&device_blurred_img_data, size));
+
+// 	dim3 work = dim3(width, height, 1);
+// 	dim3 numBlocks = dim3((width + 31) / 32, (height + 31) / 32, 1);
+// 	dim3 numThreads = dim3(32, 32, 1);
+// 	blur_kernel<<<numBlocks, numThreads>>>(device_img_data, device_blurred_img_data, width, height, channels, blur_amt);
+// 	cudaErrorPrint(cudaGetLastError());
+
+// 	CUDA_CHECK(cudaMemcpy(img_data, device_blurred_img_data, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
+	
+// 	CUDA_CHECK(cudaFree(device_img_data));
+// 	CUDA_CHECK(cudaFree(device_blurred_img_data));
+// }
+
+// void greyscale_img(
+// 	uint8_t* img_data, 
+// 	uint8_t* out_img_data, 
+// 	int width, int height)
+// {
+// 	SCOPED_TIMER(__FUNCTION__);
+	
+// 	const size_t size = width * height;
+
+// 	uchar4* device_img_data = nullptr;
+// 	CUDA_CHECK(cudaMalloc(&device_img_data, size));
+// 	CUDA_CHECK(cudaMemcpy(device_img_data, img_data, size, cudaMemcpyKind::cudaMemcpyHostToDevice));
+	
+// 	dim3 work = dim3(width, height, 1);
+// 	dim3 numBlocks = dim3((width + 31) / 32, (height + 31) / 32, 1);
+// 	dim3 numThreads = dim3(32, 32, 1);
+// 	greyscale_kernel<<<1, 1>>>(device_img_data, device_img_data, width, height);
+	
+// 	CUDA_CHECK(cudaMemcpy(img_data, device_img_data, size, cudaMemcpyKind::cudaMemcpyDeviceToHost));
+// 	CUDA_CHECK(cudaFree(device_img_data));
+// }
 
 } // namespace Effects

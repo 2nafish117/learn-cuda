@@ -62,6 +62,22 @@ ComPtr<ID3D11ShaderResourceView> inputTextureView;
 ComPtr<ID3D11Texture2D> outputTexture;
 ComPtr<ID3D11ShaderResourceView> outputTextureView;
 
+
+// cuda mapped d3d11 resources 
+struct CudaImage {
+	// handle to the graphics resource
+	cudaGraphicsResource_t texture;
+	// intermediate to write into
+	uint8_t* intermediate;
+	int width, height;
+};
+
+CudaImage cudaInputImage{};
+CudaImage cudaOutputImage{};
+
+// imgui state
+int selectedEffect = 0;
+
 void obtainSwapchainResources();
 void enumAdapters(std::vector<ComPtr<IDXGIAdapter>>& outAdapters);
 ComPtr<IDXGIAdapter> pickAdapter(const std::vector<ComPtr<IDXGIAdapter>>& adapters);
@@ -70,6 +86,9 @@ void createOutputTexture(int width, int height);
 
 void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
 void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv);
+
+// updates the textures with cuda
+void applyEffect(EffectsKind selectedEffect);
 
 void drawTheWindow();
 
@@ -92,6 +111,14 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 		
 		if(imgData != nullptr) {
 			std::printf("loaded: %s\n", path);
+
+			// deregister them from cuda before we release them
+			if(cudaInputImage.texture) {
+				CUDA_CHECK(cudaGraphicsUnregisterResource(cudaInputImage.texture));
+			}
+			if(cudaOutputImage.texture) {
+				CUDA_CHECK(cudaGraphicsUnregisterResource(cudaOutputImage.texture));
+			}
 
 			// we need to release the old one and recreate textures, because we cannot resize textures in place
 			releaseTextureAndView(inputTexture, inputTextureView);
@@ -121,13 +148,13 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 				.screenHeight = (float) windowHeight,
 			};
 			Shaders::windowQuad.setWindowQuadData(windowQuadData);
-
-			cudaGraphicsResource_t cudaTexture{};
-			cudaError_t err = cudaGraphicsD3D11RegisterResource(&cudaTexture, inputTexture.Get(), cudaGraphicsRegisterFlagsNone);
-
-
 			
-			err = cudaGraphicsUnregisterResource(cudaTexture);
+			CUDA_CHECK(cudaGraphicsD3D11RegisterResource(&cudaInputImage.texture, inputTexture.Get(), cudaGraphicsRegisterFlagsNone));
+			CUDA_CHECK(cudaGraphicsD3D11RegisterResource(&cudaOutputImage.texture, outputTexture.Get(), cudaGraphicsRegisterFlagsNone));
+			cudaInputImage.width = width;
+			cudaInputImage.height = height;
+			cudaOutputImage.width = width;
+			cudaOutputImage.height = height;
 		}
 
 		stbi_image_free(imgData);
@@ -257,11 +284,15 @@ int main(void)
 
 	while (!glfwWindowShouldClose(window))
 	{
+		// SCOPED_TIMER("frame time");
+
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 		ImGui::ShowDemoWindow();
 		drawTheWindow();
+
+		applyEffect((EffectsKind) selectedEffect);
 
 		const FLOAT clearColor[] = {0.0f, 1.0f, 0.0f, 1.0f};
 
@@ -274,7 +305,7 @@ int main(void)
 
 		deviceContext->PSSetShader(Shaders::windowQuad.pixelShader.Get(), nullptr, 0);
 		deviceContext->PSSetConstantBuffers(0, 1, Shaders::windowQuad.windowQuadDataBuffer.GetAddressOf());
-		deviceContext->PSSetShaderResources(0, 1, inputTextureView.GetAddressOf());
+		deviceContext->PSSetShaderResources(0, 1, outputTextureView.GetAddressOf());
 		deviceContext->PSSetSamplers(0, 1, samplerState.GetAddressOf());
 		
 		deviceContext->OMSetRenderTargets(1, renderTargetView.GetAddressOf(), nullptr);
@@ -569,6 +600,49 @@ void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11Shader
 	srv.Reset();
 }
 
+void applyEffect(EffectsKind selectedEffect)
+{
+	if(cudaInputImage.texture && cudaOutputImage.texture) {
+		SCOPED_TIMER("apply effect");
+		
+		// is this safe? d3d11 may be asyncronously executing?
+		CUDA_CHECK(cudaGraphicsMapResources(1, &cudaInputImage.texture));
+		CUDA_CHECK(cudaGraphicsMapResources(1, &cudaOutputImage.texture));
+		
+		// @NOTE: https://stackoverflow.com/questions/9406844/cudagraphicsresourcegetmappedpointer-returns-unknown-error
+		// use cudaGraphicsSubResourceGetMappedArray for texture objects
+		// use cudaGraphicsSubResourceGetMappedPointer for other buffer objects
+		
+		cudaArray_t cudaInputImageArray{};
+		CUDA_CHECK(cudaGraphicsSubResourceGetMappedArray(&cudaInputImageArray, cudaInputImage.texture, 0, 0));
+
+		cudaArray_t cudaOutputImageArray{};
+		CUDA_CHECK(cudaGraphicsSubResourceGetMappedArray(&cudaOutputImageArray, cudaOutputImage.texture, 0, 0));
+		
+		switch(selectedEffect) {
+			case EffectsKind::None : {
+				// @TODO: copy?
+			} break;
+			case EffectsKind::Invert : {
+				Effects::invertImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+			} break;
+			case EffectsKind::Greyscale : {
+				// Effects::greyscaleImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+			} break;
+			case EffectsKind::Blur : {
+				// Effects::blurImage(cudaInputImageArray, cudaOutputImageArray, cudaInputImage.width, cudaInputImage.height);
+			} break;
+			default: {
+				// this shouldnt happen
+				__debugbreak();
+			}
+		}
+
+		CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaInputImage.texture));
+		CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaOutputImage.texture));
+	}
+}
+
 void drawEffectsSettings(EffectsKind selectedEffect) {
 	switch(selectedEffect) {
 		case EffectsKind::None : {
@@ -586,7 +660,8 @@ void drawEffectsSettings(EffectsKind selectedEffect) {
 			ImGui::SliderInt("y blur size", &ySize, 0, 32);
 		} break;
 		default: {
-
+			// this shouldnt happen
+			__debugbreak();
 		}
 	}
 }
@@ -637,7 +712,6 @@ void drawTheWindow() {
 		// effects settings
 		if(ImGui::CollapsingHeader("Effects Settings", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			static int selectedEffect = 0;
 			ImGui::Combo("Effects", &selectedEffect, effectsKindStrings, EffectsKind::Num);
 
 			drawEffectsSettings((EffectsKind) selectedEffect);

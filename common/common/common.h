@@ -34,4 +34,5 @@ void cudaErrorPrint(cudaError_t err);
 #define CUDA_CHECK(expr) {			\
 	cudaError_t err = (expr);		\
 	cudaErrorPrint(err);			\
+	cudaDeviceSynchronize();		\
 }
