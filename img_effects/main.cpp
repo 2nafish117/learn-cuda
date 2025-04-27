@@ -27,6 +27,7 @@
 #include <cassert>
 
 #include <cuda_runtime.h>
+#include <cuda_d3d11_interop.h>
  
 template<typename T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;
@@ -37,7 +38,12 @@ using ComPtr = Microsoft::WRL::ComPtr<T>;
 int windowWidth = WINDOW_WIDTH;
 int windowHeight = WINDOW_HEIGHT;
 
+char pickedGpuDescription[128]{};
+LARGE_INTEGER pickedGpuDriverVersion{};
+
 // d3d handles and states
+ComPtr<IDXGIFactory1> factory;
+
 ComPtr<IDXGISwapChain> swapchain;
 
 ComPtr<ID3D11Device> device;
@@ -57,6 +63,8 @@ ComPtr<ID3D11Texture2D> outputTexture;
 ComPtr<ID3D11ShaderResourceView> outputTextureView;
 
 void obtainSwapchainResources();
+void enumAdapters(std::vector<ComPtr<IDXGIAdapter>>& outAdapters);
+ComPtr<IDXGIAdapter> pickAdapter(const std::vector<ComPtr<IDXGIAdapter>>& adapters);
 void setGraphicsPipelineState();
 void createOutputTexture(int width, int height);
 
@@ -84,6 +92,7 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 		if(imgData != nullptr) {
 			std::printf("loaded: %s\n", path);
 
+			// we need to release the old one and recreate textures, because we cannot resize textures in place
 			releaseTextureAndView(inputTexture, inputTextureView);
 			createTextureAndView(width, height, inputTexture, inputTextureView);
 
@@ -134,6 +143,18 @@ int main(void)
 
 	glfwSetDropCallback(window, dropCallback);
 
+	if(FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+		std::fprintf(stderr, "CreateDXGIFactory1 failed\n");
+		return -2;
+	}
+
+	std::vector<ComPtr<IDXGIAdapter>> adapters;
+	enumAdapters(adapters);
+	ComPtr<IDXGIAdapter> pickedAdapter = pickAdapter(adapters);
+	if(pickedAdapter == nullptr) {
+		return -3;
+	}
+
 	DXGI_SWAP_CHAIN_DESC swapchainDesc = {
 		.BufferDesc = DXGI_MODE_DESC {
 			.Width = (UINT) windowWidth,
@@ -159,13 +180,14 @@ int main(void)
 	};
 
 	if(FAILED(D3D11CreateDeviceAndSwapChain(
-		nullptr,
-		D3D_DRIVER_TYPE_HARDWARE, 
+		pickedAdapter.Get(),
+		D3D_DRIVER_TYPE_UNKNOWN, 
 		nullptr,
 		D3D11_CREATE_DEVICE_DEBUG, 
 		nullptr, 0, D3D11_SDK_VERSION, &swapchainDesc, &swapchain, &device, nullptr, &deviceContext))) 
 	{
 		std::fprintf(stderr, "D3D11CreateDeviceAndSwapChain failed\n");
+		return -4;
 	}
 
 	bool res = Shaders::windowQuad.compile();
@@ -186,6 +208,39 @@ int main(void)
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
+
+	// imgui font
+	{
+		ImFontConfig font_config = {};
+
+		font_config.FontDataOwnedByAtlas = true;
+		font_config.OversampleH = 6;
+		font_config.OversampleV = 6;
+		font_config.GlyphMaxAdvanceX = FLT_MAX;
+		font_config.RasterizerMultiply = 1.4f;
+		font_config.RasterizerDensity = 1.0f;
+		font_config.EllipsisChar = UINT16_MAX;
+
+		font_config.PixelSnapH = false;
+		font_config.GlyphOffset = ImVec2{0.0, -1.0};
+
+		io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf", 16.0f, &font_config);
+
+		font_config.MergeMode = true;
+
+		const uint16_t ICON_MIN_FA = 0xe005;
+		const uint16_t ICON_MAX_FA = 0xf8ff;
+
+		static uint16_t FA_RANGES[3] = {ICON_MIN_FA, ICON_MAX_FA, 0};
+
+		font_config.RasterizerMultiply = 1.0;
+		font_config.GlyphOffset = ImVec2{0.0, -1.0};
+
+		// @TODO: need more fonts?
+		// io.Fonts->AddFontFromFileTTF("assets/fa-regular-400.ttf", 14.0, &font_config, FA_RANGES);
+
+		font_config.MergeMode = false;
+	}
 
 	ImGui_ImplGlfw_InitForOther(window, true);
 	ImGui_ImplDX11_Init(device.Get(), deviceContext.Get());
@@ -261,6 +316,74 @@ int main(void)
 
 // 	return 0;
 // }
+
+void enumAdapters(std::vector<ComPtr<IDXGIAdapter>>& outAdapters) {
+	// hard upper bound 512, who has more than 512 gpus?
+	for (int i = 0; i < 512; ++i)
+	{
+		ComPtr<IDXGIAdapter> adapter;
+		HRESULT res = factory->EnumAdapters(i, &adapter);
+
+		if (res == DXGI_ERROR_NOT_FOUND) {
+			break;
+		}
+
+		outAdapters.push_back(adapter);
+	}
+}
+
+ComPtr<IDXGIAdapter> pickAdapter(const std::vector<ComPtr<IDXGIAdapter>>& adapters) {
+	std::printf("trying to pick a cuda compatible adapter\n");
+
+	assert(adapters.size() > 0 && "");
+
+	bool foundCudaCompatibleDevice = false;
+	int cudaCompatibleDevice{};
+	ComPtr<IDXGIAdapter> cudaCompatibleAdapter;
+	
+	for (auto& adapter : adapters) {
+		DXGI_ADAPTER_DESC desc{};
+		if (FAILED(adapter->GetDesc(&desc))) {
+			std::fprintf(stderr, "error GetDesc on adapter\n");
+		}
+
+		memset(pickedGpuDescription, 0, 128);
+		wcstombs_s(nullptr, pickedGpuDescription, desc.Description, 128);
+
+		std::printf(
+			"[DXGI_ADAPTER_DESC1 Description=%s VendorId=%d DeviceId=%d SubSysId=%d Revision=%d DedicatedVideoMemory=%lld DedicatedSystemMemory=%lld SharedSystemMemory=%lld]\n",
+			pickedGpuDescription,
+			desc.VendorId,
+			desc.DeviceId,
+			desc.SubSysId,
+			desc.Revision,
+			desc.DedicatedVideoMemory,
+			desc.DedicatedSystemMemory,
+			desc.SharedSystemMemory
+		);
+
+		int device{};
+		if(cudaError_t err = cudaD3D11GetDevice(&device, adapter.Get()); err == cudaSuccess) {
+			std::printf("found cuda compatible adapter\n");
+			foundCudaCompatibleDevice = true;
+			cudaCompatibleDevice = device;
+			cudaCompatibleAdapter = adapter;
+			break;
+		} else {
+			std::printf("this device is not cuda compatible, looking for more...\n");
+		}
+	}
+
+	if(!foundCudaCompatibleDevice) {
+		std::fprintf(stderr, "no available cuda compatible adapter found\n");
+	}
+
+	if(FAILED(cudaCompatibleAdapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &pickedGpuDriverVersion))) {
+		std::printf("CheckInterfaceSupport for adapter failed");
+	}
+	
+	return cudaCompatibleAdapter;
+}
 
 void obtainSwapchainResources() {
 	ComPtr<ID3D11Texture2D> backBuffer;
@@ -396,7 +519,6 @@ void createOutputTexture(int width, int height) {
 	}
 }
 
-
 void createTextureAndView(int width, int height, ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11ShaderResourceView>& srv) {
 	D3D11_TEXTURE2D_DESC textureDesc = {
 		.Width = (UINT) width,
@@ -441,8 +563,11 @@ void drawEffectsSettingsWindow() {
 	if(ImGui::Begin("Effects Settings")) {
 
 		// frame time graph
-		// if(ImGui::CollapsingHeader("Hello"))
+		if(ImGui::CollapsingHeader("Info"))
 		{
+			ImGui::Text("gpu: %s", pickedGpuDescription);
+			ImGui::Text("driver version: %lld", pickedGpuDriverVersion);
+
 			constexpr int FRAME_TIME_BUFFER_SIZE = 64;
 	
 			static float frameTimes[FRAME_TIME_BUFFER_SIZE];
