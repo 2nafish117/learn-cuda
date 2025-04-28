@@ -18,8 +18,10 @@ cmake ..
 ## TODO
 
 1. effects
-   1. fix pitch stuff in the effects, test em out with images
-   2. sobel edge detection filter ...
+   1. unify application of kernels onto images
+   2. canny edge detection filter
+   3. sobel edge detection filter
+   4. gaussian blur with params
 2. raytracer/pathtracer
 
 ## writeup on
