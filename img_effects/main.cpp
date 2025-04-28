@@ -72,7 +72,6 @@ CudaImage cudaOutputImage{};
 // imgui state
 int selectedEffect = 0;
 float effectCalculationTimeMs = 0;
-// @TODO: set this to true only when we need to recalculate
 bool needCalculateEffect = true;
 
 Effects::BlurParams blurParams{};
@@ -140,6 +139,7 @@ void dropCallback(GLFWwindow* window, int path_count, const char* paths[]) {
 				}
 				
 				deviceContext->Unmap(inputTexture.Get(), 0);
+				needCalculateEffect = true;
 			} else {
 				std::fprintf(stderr, "resource Map failed\n");
 			}
@@ -557,6 +557,7 @@ void releaseTextureAndView(ComPtr<ID3D11Texture2D>& texture, ComPtr<ID3D11Shader
 void applyEffect(EffectsKind selectedEffect)
 {
 	if(needCalculateEffect && cudaInputImage.texture && cudaOutputImage.texture) {
+		needCalculateEffect = false;
 		auto timer = ScopedTimer("apply effect");
 		
 		CUDA_CHECK(cudaGraphicsMapResources(1, &cudaInputImage.texture));
@@ -601,7 +602,8 @@ void applyEffect(EffectsKind selectedEffect)
 	}
 }
 
-void drawEffectsSettings(EffectsKind selectedEffect) {
+bool drawEffectsSettings(EffectsKind selectedEffect) {
+	bool changed = false;
 	ImGui::TextWrapped("effect calculation time: %.3fms", effectCalculationTimeMs);
 	ImGui::Separator();
 	switch(selectedEffect) {
@@ -615,21 +617,23 @@ void drawEffectsSettings(EffectsKind selectedEffect) {
 			ImGui::TextWrapped("we dont have any settings for greyscale :), this just converts to greyscale");
 		} break;
 		case EffectsKind::Blur : {
-			ImGui::InputInt("x blur size", &blurParams.xSize, 2, 2);
-			ImGui::InputInt("y blur size", &blurParams.ySize, 2, 2);
+			changed |= ImGui::InputInt("x blur size", &blurParams.xSize, 2, 2);
+			changed |= ImGui::InputInt("y blur size", &blurParams.ySize, 2, 2);
 			blurParams.xSize = std::clamp(blurParams.xSize, 3, 31);
 			blurParams.ySize = std::clamp(blurParams.ySize, 3, 31);
 		} break;
 		case EffectsKind::Sobel : {
 			static int xSize, ySize;
-			ImGui::SliderInt("x sobel size", &xSize, 0, 32);
-			ImGui::SliderInt("y sobel size", &ySize, 0, 32);
+			changed |= ImGui::SliderInt("x sobel size", &xSize, 0, 32);
+			changed |= ImGui::SliderInt("y sobel size", &ySize, 0, 32);
 		} break;
 		default: {
 			// this shouldnt happen
 			__debugbreak();
 		}
 	}
+
+	return changed;
 }
 
 void drawTheWindow() {
@@ -679,9 +683,8 @@ void drawTheWindow() {
 		// effects settings
 		if(ImGui::CollapsingHeader("Effects Settings", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::Combo("Effects", &selectedEffect, effectsKindStrings, EffectsKind::Num);
-
-			drawEffectsSettings((EffectsKind) selectedEffect);
+			needCalculateEffect |= ImGui::Combo("Effects", &selectedEffect, effectsKindStrings, EffectsKind::Num);
+			needCalculateEffect |= drawEffectsSettings((EffectsKind) selectedEffect);
 		}
 	}
 	ImGui::End();

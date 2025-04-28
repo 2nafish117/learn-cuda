@@ -24,6 +24,9 @@ void copyImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int hei
 void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
 void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
 
+// @TODO: apply a generic 2d kernel over the image, maybe port other effects to use this 
+// void applyGenericKernelImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
+
 struct BlurParams {
 	int xSize;
 	int ySize;
