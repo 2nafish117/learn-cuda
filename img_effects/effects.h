@@ -20,6 +20,7 @@ static const char* const effectsKindStrings[] = {
 
 namespace Effects {
 
+
 void copyImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
 void invertImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
 void greyscaleImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height);
@@ -37,5 +38,6 @@ struct SobelParams {
 	
 };
 void sobelImage(cudaArray_t inImgData, cudaArray_t outImgData, int width, int height, const SobelParams& params);
+
 
 } // namespace Effects

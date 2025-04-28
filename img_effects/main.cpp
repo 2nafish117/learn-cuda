@@ -305,6 +305,7 @@ int main(void)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 		// ImGui::ShowDemoWindow();
+		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 		drawTheWindow();
 
 		applyEffect((EffectsKind) selectedEffect);
@@ -697,7 +698,23 @@ void drawTheWindow() {
 		if(ImGui::CollapsingHeader("Image Save Settings", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if(ImGui::Button("Save Image")) {
-				// @TODO: we can save the image now
+				// get img data from texture
+				uint8_t* imgData = (uint8_t*) malloc(4 * cudaOutputImage.width * cudaOutputImage.height);
+				
+				CUDA_CHECK(cudaGraphicsMapResources(1, &cudaOutputImage.texture));
+				
+				cudaArray_t cudaOutputImageArray{};
+				CUDA_CHECK(cudaGraphicsSubResourceGetMappedArray(&cudaOutputImageArray, cudaOutputImage.texture, 0, 0));
+				CUDA_CHECK(cudaMemcpy2DFromArray(
+					imgData, cudaOutputImage.width * 4, 
+					cudaOutputImageArray, 0, 0, cudaOutputImage.width * 4, cudaOutputImage.height, 
+					cudaMemcpyDeviceToHost));
+					
+					CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaOutputImage.texture));
+					
+				// we can save the image now
+				stbi_write_jpg(ASSET_PATH("output.jpg"), cudaOutputImage.width, cudaOutputImage.height, 4, imgData, 65);
+				free(imgData);
 			}
 		}
 	}

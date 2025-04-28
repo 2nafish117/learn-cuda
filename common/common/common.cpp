@@ -23,5 +23,6 @@ void cudaErrorPrint(cudaError_t err) {
 		std::fprintf(stderr, "[cuda error %d] %s %s\n", (uint32_t) err, errName, errStr);
 		std::fflush(stdout);
 		std::fflush(stderr);
+		cudaDeviceSynchronize();
 	}
 }
