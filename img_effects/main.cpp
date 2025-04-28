@@ -640,10 +640,17 @@ void drawTheWindow() {
 	if(ImGui::Begin("Window")) {
 
 		// frame time graph
-		if(ImGui::CollapsingHeader("Info", ImGuiTreeNodeFlags_DefaultOpen))
+		if(ImGui::CollapsingHeader("App Info", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			ImGui::TextWrapped("Drag and drop an image into the window to make changes to it." 
+				"once you're happy with the effects, try saving the image. "
+				"You can find the image save settings under the Image Save Settings dropdown.");
+
+			ImGui::Separator();
+
 			ImGui::TextWrapped("gpu: %s", pickedGpuDescription);
 			ImGui::TextWrapped("driver version: %lld", pickedGpuDriverVersion);
+
 			ImGui::Separator();
 
 			constexpr int FRAME_TIME_BUFFER_SIZE = 64;
@@ -685,6 +692,13 @@ void drawTheWindow() {
 		{
 			needCalculateEffect |= ImGui::Combo("Effects", &selectedEffect, effectsKindStrings, EffectsKind::Num);
 			needCalculateEffect |= drawEffectsSettings((EffectsKind) selectedEffect);
+		}
+
+		if(ImGui::CollapsingHeader("Image Save Settings", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			if(ImGui::Button("Save Image")) {
+				// @TODO: we can save the image now
+			}
 		}
 	}
 	ImGui::End();
