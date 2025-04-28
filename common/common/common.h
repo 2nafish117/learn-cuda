@@ -2,6 +2,9 @@
 
 #include <string_view>
 #include <chrono>
+#include <iostream>
+#include <random>
+#include <cassert>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>

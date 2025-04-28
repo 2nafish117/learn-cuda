@@ -21,11 +21,6 @@
 #include "effects.h"
 #include "shaders.h"
 
-#include <iostream>
-#include <chrono>
-#include <random>
-#include <cassert>
-
 #include <cuda_runtime.h>
 #include <cuda_d3d11_interop.h>
  
@@ -622,8 +617,8 @@ void drawEffectsSettings(EffectsKind selectedEffect) {
 		case EffectsKind::Blur : {
 			ImGui::InputInt("x blur size", &blurParams.xSize, 2, 2);
 			ImGui::InputInt("y blur size", &blurParams.ySize, 2, 2);
-			blurParams.xSize = std::clamp(blurParams.xSize, 1, 31);
-			blurParams.ySize = std::clamp(blurParams.ySize, 1, 31);
+			blurParams.xSize = std::clamp(blurParams.xSize, 3, 31);
+			blurParams.ySize = std::clamp(blurParams.ySize, 3, 31);
 		} break;
 		case EffectsKind::Sobel : {
 			static int xSize, ySize;
