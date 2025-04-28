@@ -305,7 +305,7 @@ int main(void)
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 		// ImGui::ShowDemoWindow();
-		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 		drawTheWindow();
 
 		applyEffect((EffectsKind) selectedEffect);
@@ -620,6 +620,13 @@ bool drawEffectsSettings(EffectsKind selectedEffect) {
 		case EffectsKind::Blur : {
 			changed |= ImGui::InputInt("x blur size", &blurParams.xSize, 2, 2);
 			changed |= ImGui::InputInt("y blur size", &blurParams.ySize, 2, 2);
+			// ensure theyre not an even number
+			if(changed && blurParams.xSize % 2 == 0) {
+				blurParams.xSize++;
+			}
+			if(changed && blurParams.ySize % 2 == 0) {
+				blurParams.ySize++;
+			}
 			blurParams.xSize = std::clamp(blurParams.xSize, 3, 31);
 			blurParams.ySize = std::clamp(blurParams.ySize, 3, 31);
 		} break;
@@ -648,11 +655,13 @@ void drawTheWindow() {
 				"You can find the image save settings under the Image Save Settings dropdown.");
 
 			ImGui::Separator();
+			ImGui::Spacing();
 
 			ImGui::TextWrapped("gpu: %s", pickedGpuDescription);
 			ImGui::TextWrapped("driver version: %lld", pickedGpuDriverVersion);
 
 			ImGui::Separator();
+			ImGui::Spacing();
 
 			constexpr int FRAME_TIME_BUFFER_SIZE = 64;
 	
@@ -674,18 +683,16 @@ void drawTheWindow() {
 				overlayUpdate = now;
 				
 				float avgFrameTime = 0;
-				float avgFrameRate = 0;
 				for(int i = 0; i < FRAME_TIME_BUFFER_SIZE; ++i) {
 					avgFrameTime += frameTimes[i];
-					avgFrameRate += 1000.0f / max(frameTimes[i], 0.000001);
 				}
 				avgFrameTime /= FRAME_TIME_BUFFER_SIZE;
-				avgFrameRate /= FRAME_TIME_BUFFER_SIZE;
+				float avgFrameRate = 1000.0f / avgFrameTime;
 	
 				sprintf_s(overlay, "avg %.2fms (%.1f fps)", avgFrameTime, avgFrameRate);
 			}
 	
-			ImGui::PlotLines("frame time", frameTimes, 64, offset, overlay, 0, 100, ImVec2(0, 80.0f));
+			ImGui::PlotLines("frame time", frameTimes, 64, offset, overlay, 0, 50, ImVec2(0, 80.0f));
 		}
 
 		// effects settings
