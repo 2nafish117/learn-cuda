@@ -22,9 +22,11 @@ target_include_directories(${TARGET} PRIVATE
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
 
-# target_link_libraries(
-#     ${TARGET}
-# )
+target_link_libraries(
+    ${TARGET}
+
+	cudart.lib
+)
 
 target_include_directories(${TARGET}
 	PUBLIC .

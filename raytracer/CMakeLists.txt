@@ -8,6 +8,8 @@ add_executable(
 	
 	shaders.h
 	shaders.cpp
+
+	raytracer.cu
 	)
 
 set_target_properties(${TARGET} PROPERTIES 
@@ -31,4 +33,6 @@ target_link_libraries(
 	d3d11.lib
 	dxgi.lib
 	d3dcompiler.lib
+
+	cudart.lib
 )

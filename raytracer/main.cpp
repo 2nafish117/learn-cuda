@@ -93,7 +93,7 @@ int main(void)
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "image effects with cuda", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "raytracer with cuda", nullptr, nullptr);
 	if (!window)
 	{
 		glfwTerminate();
